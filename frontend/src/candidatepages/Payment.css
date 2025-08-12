@@ -1,0 +1,30 @@
+.pay-overlay{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,0.5);
+  backdrop-filter:blur(4px);
+  z-index:1000;
+}
+
+.pay-popup {
+  position:relative;
+    max-width: 420px;
+    margin: 4rem auto;
+    padding: 2rem 2.5rem;
+    background: rgba(30,30,47,0.92);
+    border: 1px solid #0dcaf0;
+    border-radius: 12px;
+    color: #fff;
+    text-align: center;
+  }
+  .pay-popup input {
+    width: 100%;  margin: .6rem 0;  padding: .7rem 1rem;
+    border-radius: 6px;  border: 1px solid #444;  background:#222; color:#eee;
+  }
+
+  .pay-popup .qr { width: 220px; margin:1rem auto; display:block; }
+  .pay-popup .err { color:#ff6b6b; font-size:.9rem; }
+  .pay-popup .note{ font-size:.8rem; opacity:.7; }
