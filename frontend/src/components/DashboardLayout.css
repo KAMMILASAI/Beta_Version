@@ -1,0 +1,222 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboard-root {
+  min-height: 100%;
+  width: 100%;
+  background: #23233a;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+.dashboard-header {
+  background: #1e1e2f;
+  color: #fff;
+  padding: 1rem 2rem;
+  display: flex;
+  align-items: center;
+  font-size: 1.2rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  border-bottom: 2px solid #90EE90;
+}
+
+.dynamic-gradient-text {
+  background: greenyellow;
+  background-size: 600% 600%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientMove 5s linear infinite;
+}
+
+@keyframes gradientMove {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.sidebar-toggle {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.6rem;
+  margin-right: 1.5rem;
+  cursor: pointer;
+}
+.dashboard-body {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: calc(100% - 60px);
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+.dashboard-sidebar {
+  background: #23233a;
+  color: #fff;
+  width: 70px;
+  min-width: 70px;
+  max-width: 70px;
+  padding: 2rem 0.5rem 1rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease, min-width 0.3s ease, max-width 0.3s ease, padding 0.3s ease;
+  border-right: 2px solid #90EE90;
+  overflow: hidden;
+}
+
+.dashboard-sidebar:hover {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  padding: 2rem 1rem 1rem 1rem;
+}
+.dashboard-sidebar.closed {
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+  padding: 2rem 0 1rem 0;
+  overflow: hidden;
+}
+.dashboard-sidebar nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem 0;
+}
+.dashboard-sidebar nav ul li {
+  padding: 0.7rem;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, padding 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+.dashboard-sidebar:hover nav ul li {
+  padding: 0.7rem 1rem;
+  justify-content: flex-start;
+}
+
+.sidebar-menu-text {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transition: opacity 0.3s ease, width 0.3s ease;
+}
+
+.dashboard-sidebar:hover .sidebar-menu-text {
+  opacity: 1;
+  width: auto;
+}
+.dashboard-sidebar nav ul li:hover {
+  background: #0dcaf0;
+  color: #fff;
+}
+.logout-btn {
+  background: #ff4d4f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.7rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: auto;
+  transition: background 0.2s, padding 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.dashboard-sidebar:hover .logout-btn {
+  padding: 0.7rem 1rem;
+  justify-content: flex-start;
+}
+.logout-btn:hover {
+  background: #d9363e;
+}
+.dashboard-main {
+  flex: 1;
+  padding: 0 3%;
+  margin: 0;
+  min-width: 0;
+  background: #23233a;
+  overflow-y: auto;
+  height: 100%;
+  display: block; /* full-width content */
+}
+
+/* Ensure direct children can span full width */
+.dashboard-main > * {
+  width: 100%;
+}
+
+/* Light Theme Overrides (follow body theme) */
+body.theme-light .dashboard-root,
+body.theme-light .dashboard-main {
+  background: #ffffff !important;
+  color: #0f172a;
+}
+
+body.theme-light .dashboard-header {
+  background: #ffffff !important;
+  color: #0f172a;
+  border-bottom-color: #e5e7eb !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+body.theme-light .sidebar-toggle { color: #0f172a; }
+
+body.theme-light .dashboard-sidebar {
+  background: #ffffff !important;
+  color: #0f172a;
+  border-right-color: #e5e7eb !important;
+}
+
+body.theme-light .dashboard-sidebar nav ul li:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+@media (max-width: 900px) {
+  .dashboard-sidebar {
+    position: absolute;
+    z-index: 10;
+    height: 100vh;
+    left: 0;
+    top: 0;
+    box-shadow: 2px 0 16px rgba(0,0,0,0.08);
+  }
+  .dashboard-sidebar.closed {
+    left: -220px;
+  }
+  .dashboard-main {
+    padding: 0 3%;
+  }
+}

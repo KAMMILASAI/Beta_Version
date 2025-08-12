@@ -1,0 +1,57 @@
+.send-notification-root {
+  padding: 2rem 0 0 0;
+  max-width: 480px;
+}
+.send-notification-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  background: linear-gradient(135deg, #f8fafc 60%, #e0e7ff 100%);
+  border-radius: 16px;
+  box-shadow: 0 2px 16px 0 #0001;
+  padding: 2rem 2.5rem;
+  margin-top: 1.5rem;
+}
+.send-notification-form input,
+.send-notification-form textarea {
+  font-size: 1.1rem;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  border: 1.5px solid #6366f1;
+  outline: none;
+  background: #fff;
+  color: #23233a;
+  font-weight: 500;
+  transition: border 0.18s;
+}
+.send-notification-form input:focus,
+.send-notification-form textarea:focus {
+  border: 2px solid #0dcaf0;
+}
+.send-notification-form button {
+  background: linear-gradient(90deg, #6366f1 60%, #0dcaf0 100%);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 8px;
+  padding: 0.8rem 0;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: background 0.18s, box-shadow 0.18s;
+  box-shadow: 0 2px 8px #6366f133;
+}
+.send-notification-form button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.notif-success {
+  color: #22c55e;
+  font-weight: 600;
+  margin-top: 1.2rem;
+}
+.notif-error {
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 1.2rem;
+}
