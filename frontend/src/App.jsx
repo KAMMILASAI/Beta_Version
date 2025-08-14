@@ -1,5 +1,6 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
+import { ToastProvider } from './contexts/ToastContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import AdminDashboard from './adminpages/Dashboard'
@@ -24,20 +25,25 @@ import PendingApproval from './pages/PendingApproval.jsx';
 import ForgotPassword from './pages/ForgotPassword.jsx';
 import Payment from './candidatepages/Payment';
 import ApplyJob from './pages/ApplyJob';
+import OAuth2RedirectHandler from './components/OAuth2RedirectHandler';
 
 function App() {
   return (
-    <Routes>
-      <Route path='/' element={<Login />} />
-      <Route path='/register' element={<Register />} />
-      <Route path='/admin/*' element={<AdminDashboard />} />
-      <Route path='/recruiter/*' element={<RecruiterDashboard />} />
-      <Route path='/candidate/*' element={<CandidateDashboard />} />
-      <Route path='/oauth-success' element={<OAuthSuccess />} />
-      <Route path="/pending-approval" element={<PendingApproval />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/jobs/:linkId" element={<ApplyJob />} />
-    </Routes>
+    <ToastProvider>
+      <Routes>
+        <Route path='/' element={<Login />} />
+        <Route path='/login' element={<Login />} />
+        <Route path='/register' element={<Register />} />
+        <Route path='/admin/*' element={<AdminDashboard />} />
+        <Route path='/recruiter/*' element={<RecruiterDashboard />} />
+        <Route path='/candidate/*' element={<CandidateDashboard />} />
+        <Route path='/oauth-success' element={<OAuthSuccess />} />
+        <Route path='/oauth2/redirect' element={<OAuth2RedirectHandler />} />
+        <Route path="/pending-approval" element={<PendingApproval />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/jobs/:linkId" element={<ApplyJob />} />
+      </Routes>
+    </ToastProvider>
   )
 }
 

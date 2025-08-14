@@ -27,7 +27,7 @@ export default function EditProfile() {
       try {
         setError('');
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/candidate/profile', {
+        const res = await axios.get('http://localhost:8080/api/candidate/profile', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setForm(res.data);
@@ -51,7 +51,7 @@ export default function EditProfile() {
       const token = localStorage.getItem('token');
       const data = new FormData();
       data.append('image', file);
-      const res = await axios.patch('http://localhost:5000/api/user/profile-photo', data, {
+      const res = await axios.patch('http://localhost:8080/api/user/profile-photo', data, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
       });
       setForm(f => ({ ...f, image: res.data.image }));
@@ -73,7 +73,7 @@ export default function EditProfile() {
       const token = localStorage.getItem('token');
       const formData = new FormData();
       Object.entries(form).forEach(([k, v]) => formData.append(k, v));
-      const res = await axios.put('http://localhost:5000/api/candidate/profile', formData, {
+      const res = await axios.put('http://localhost:8080/api/candidate/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
       });
       setSuccess(true);

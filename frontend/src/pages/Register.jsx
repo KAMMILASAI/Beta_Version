@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useToast } from '../contexts/ToastContext';
 import './Auth.css';
+
+// API base URL
+const API_URL = 'http://localhost:8080/api';
 
 const googleLogo = (
   <svg width="20" height="20" viewBox="0 0 24 24">
@@ -33,9 +37,9 @@ const eyeOffIcon = (
 );
 
 const Register = () => {
-  // Force refresh - updated styles
   const navigate = useNavigate();
   const location = useLocation();
+  const { showSuccess, showError, showInfo } = useToast();
   const [role, setRole] = useState('candidate');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -57,8 +61,34 @@ const Register = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const errorParam = urlParams.get('error');
+    const oauth2User = location.state?.oauthUser || urlParams.get('oauth2User') === 'true';
+    const oauthEmail = location.state?.email || urlParams.get('email');
+    const oauthName = location.state?.name || urlParams.get('name');
+    
     if (errorParam === 'oauth_register_required') {
-      setError('Please register first before using social login.');
+      showError('Please register first before using social login.');
+    }
+    
+    // Handle OAuth2 user data
+    if (oauth2User && oauthEmail) {
+      setEmail(oauthEmail);
+      setEmailVerified(true);
+      setShowOtpInput(false);
+      showInfo('Email verified via OAuth2. Please complete your registration.');
+      
+      // Try to extract first and last name from OAuth2 name
+      if (oauthName) {
+        const nameParts = oauthName.split(' ');
+        if (nameParts.length > 0) {
+          setFirstName(nameParts[0]);
+          if (nameParts.length > 1) {
+            setLastName(nameParts.slice(1).join(' '));
+          }
+        }
+      }
+      
+      // Show success message
+      setSuccess('Please complete your registration to continue');
     }
   }, [location]);
 
@@ -67,18 +97,34 @@ const Register = () => {
       setError('Please enter email first');
       return;
     }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+    
     setError('');
     setLoadingOtp(true);
+    
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/send-otp', { email });
-      if (res.data.message === 'OTP sent successfully') {
-        alert('OTP sent to your email');
+      const res = await axios.post(`${API_URL}/auth/send-registration-otp`, { 
+        email,
+        name: firstName || 'User' // Send name for personalized email
+      });
+      
+      if (res.data.message === 'OTP sent successfully to your email' || res.data.success) {
+        setSuccess('OTP has been sent to your email');
         setShowOtpInput(true);
       } else {
-        setError(res.data.message);
+        setError(res.data.message || 'Failed to send OTP. Please try again.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send OTP');
+      const errorMessage = err.response?.data?.message || 
+                         err.response?.data?.error || 
+                         'Failed to send OTP. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoadingOtp(false);
     }
@@ -86,22 +132,38 @@ const Register = () => {
 
   const verifyOtp = async () => {
     if (!otp) {
-      setError('Please enter OTP');
+      setError('Please enter the OTP sent to your email');
       return;
     }
+    
+    // Basic OTP validation
+    const otpRegex = /^\d{6}$/;
+    if (!otpRegex.test(otp)) {
+      setError('Please enter a valid 6-digit OTP');
+      return;
+    }
+    
     setError('');
     setLoadingVerify(true);
+    
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/verify-otp', { email, otp });
-      if (res.data.message === 'OTP Verified') {
-        alert('Email verified successfully!');
+      const res = await axios.post(`${API_URL}/auth/verify-registration-otp`, { 
+        email, 
+        otp
+      });
+      
+      if (res.data.message === 'OTP verified successfully' || res.data.success) {
+        setSuccess('Email verified successfully!');
         setEmailVerified(true);
         setShowOtpInput(false);
       } else {
-        setError(res.data.message || 'Invalid OTP');
+        setError(res.data.message || 'Invalid OTP. Please try again.');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to verify OTP');
+      const errorMessage = err.response?.data?.message || 
+                         err.response?.data?.error || 
+                         'Failed to verify OTP. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoadingVerify(false);
     }
@@ -109,20 +171,105 @@ const Register = () => {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (password !== confirm) {
-      setError('Passwords do not match');
+    
+    // Validation
+    if (!firstName.trim()) {
+      showError('First name is required.');
       return;
     }
+    if (!lastName.trim()) {
+      showError('Last name is required.');
+      return;
+    }
+    if (!emailVerified) {
+      showError('Please verify your email first.');
+      return;
+    }
+    if (!phone.trim()) {
+      showError('Phone number is required.');
+      return;
+    }
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirm) {
+      showError('Passwords do not match.');
+      return;
+    }
+    
     setIsLoading(true);
     setError('');
+    
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/register', {
-        firstName, lastName, email, phone, password, role
-      });
-      alert(res.data.message);
-      navigate('/');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      const userData = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password,
+        role: role || 'candidate',
+        otp: otp, // Include OTP for backend verification
+        verified: true // Since we've verified with OTP
+      };
+      
+      const res = await axios.post(`${API_URL}/auth/register`, userData);
+      
+      if (res.data.message === 'User registered successfully') {
+        // Check if we got a token for auto-login
+        const token = res.data.accessToken || res.data.token;
+        
+        if (token && res.data.user) {
+          // Auto-login after successful registration
+          showSuccess('Registration successful! Redirecting to your dashboard...');
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(res.data.user));
+          
+          // Clear form
+          setFirstName('');
+          setLastName('');
+          setEmail('');
+          setPhone('');
+          setPassword('');
+          setConfirm('');
+          setEmailVerified(false);
+          
+          // Redirect to dashboard based on role
+          setTimeout(() => {
+            const userRole = res.data.user?.role || role || 'candidate';
+            if (userRole === 'admin') {
+              navigate('/admin/dashboard');
+            } else if (userRole === 'recruiter') {
+              navigate('/recruiter/dashboard');
+            } else {
+              navigate('/candidate/dashboard');
+            }
+          }, 1500);
+        } else {
+          // Registration successful but no token - redirect to login
+          showSuccess('Registration successful! Please login with your credentials.');
+          
+          // Clear form
+          setFirstName('');
+          setLastName('');
+          setEmail('');
+          setPhone('');
+          setPassword('');
+          setConfirm('');
+          setEmailVerified(false);
+          
+          setTimeout(() => navigate('/'), 1500);
+        }
+      } else {
+        showError(res.data.message || 'Registration failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      if (error.response?.data?.message) {
+        showError(error.response.data.message);
+      } else {
+        showError('Registration failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -305,11 +452,27 @@ const Register = () => {
             <div className="social-login-section">
               <p className="social-login-title">Or sign up with</p>
               <div className="social-login-container">
-                <button className="social-btn" onClick={()=>window.location.href=`http://localhost:5000/api/auth/google?role=${role}`}>
+                <button 
+                  className="social-btn google-btn"
+                  onClick={() => {
+                    const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                    window.location.href = `${API_URL}/oauth2/authorize/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                  }}
+                  title="Continue with Google"
+                >
                   {googleLogo}
+                  <span>Continue with Google</span>
                 </button>
-                <button className="social-btn" onClick={()=>window.location.href=`http://localhost:5000/api/auth/github?role=${role}`}>
+                <button 
+                  className="social-btn github-btn"
+                  onClick={() => {
+                    const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                    window.location.href = `${API_URL}/oauth2/authorize/github?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                  }}
+                  title="Continue with GitHub"
+                >
                   {githubLogo}
+                  <span>Continue with GitHub</span>
                 </button>
               </div>
             </div>

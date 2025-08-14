@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import { useToast } from '../contexts/ToastContext';
 import './Auth.css';
+
+// API base URL
+const API_URL = 'http://localhost:8080/api';
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [step, setStep] = useState(1); // 1: email, 2: reset
   const [email, setEmail] = useState('');
@@ -12,39 +17,62 @@ export default function ForgotPassword() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
 
   const sendOtp = async () => {
-    if (!email) return;
+    if (!email) {
+      showError('Please enter your email address.');
+      return;
+    }
+    
     try {
       setLoading(true);
-      setMessage('');
-      await axios.post('http://localhost:5000/api/auth/forgot-password/send-otp', { email });
-      setStep(2);
+      const response = await axios.post(`${API_URL}/auth/forgot-password`, { email });
+      
+      if (response.data.message) {
+        showSuccess('Reset code sent to your email! Please check your inbox.');
+        setStep(2);
+      }
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Failed to send OTP');
+      console.error('Send OTP error:', err);
+      showError(err.response?.data?.message || 'Failed to send reset code. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const resetPassword = async () => {
-    if (!otp || !password || password !== confirm) {
-      setMessage('Please enter all fields and ensure passwords match.');
+    if (!otp) {
+      showError('Please enter the reset code.');
       return;
     }
+    if (!password) {
+      showError('Please enter a new password.');
+      return;
+    }
+    if (password.length < 6) {
+      showError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (password !== confirm) {
+      showError('Passwords do not match.');
+      return;
+    }
+    
     try {
       setLoading(true);
-      setMessage('');
-      await axios.post('http://localhost:5000/api/auth/forgot-password/reset', {
+      const response = await axios.post(`${API_URL}/auth/reset-password`, {
         email,
         otp,
         newPassword: password,
       });
-      alert('Password updated successfully! Please login with new password.');
-      navigate('/');
+      
+      if (response.data.message) {
+        showSuccess('Password updated successfully! Redirecting to login...');
+        setTimeout(() => navigate('/'), 2000);
+      }
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Failed to reset password');
+      console.error('Reset password error:', err);
+      showError(err.response?.data?.message || 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,12 +96,6 @@ export default function ForgotPassword() {
       <div className="right-box">
         <div className="auth-card">
           <h2>{step === 1 ? 'Forgot Password' : 'Reset Password'}</h2>
-          
-          {message && (
-            <div className={`auth-message ${message.includes('successfully') ? 'success' : 'error'}`}>
-              {message}
-            </div>
-          )}
           
           <form className="auth-form" onSubmit={(e) => e.preventDefault()}>
             {step === 1 ? (

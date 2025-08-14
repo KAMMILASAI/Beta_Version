@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import { useToast } from '../contexts/ToastContext';
 import './Auth.css';
+
+// API base URL
+const API_URL = 'http://localhost:8080/api';
 
 const googleLogo = (
   <svg width="20" height="20" viewBox="0 0 24 24">
@@ -33,9 +37,9 @@ const eyeOffIcon = (
 );
 
 const Login = () => {
-  // Force refresh - updated styles
   const navigate = useNavigate();
   const location = useLocation();
+  const { showSuccess, showError, showInfo } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -49,19 +53,32 @@ const Login = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const message = urlParams.get('message');
+    const errorParam = urlParams.get('error');
+    
     if (message === 'recruiter_pending') {
-      setError('Your recruiter registration is pending admin approval. You will receive an email once reviewed.');
+      showError('Your recruiter registration is pending admin approval. You will receive an email once reviewed.');
     }
     
-    // Clear messages after 5 seconds
-    if (error || success) {
-      const timer = setTimeout(() => {
-        setError('');
-        setSuccess('');
-      }, 5000);
-      return () => clearTimeout(timer);
+    if (errorParam) {
+      showError(errorParam);
     }
-  }, [location, error, success]);
+    
+    // Check for OAuth2 success message
+    if (location.state?.success) {
+      showSuccess(location.state.success);
+    }
+    
+    if (location.state?.error) {
+      showError(location.state.error);
+    }
+    
+    // Load remembered email
+    const rememberedEmail = localStorage.getItem('rememberedEmail');
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+      setRememberMe(true);
+    }
+  }, [location, showError, showSuccess]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -70,56 +87,91 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+      
       if (res.data.otpRequired) {
-        setSuccess('OTP sent to your email! Please check your inbox.');
+        showSuccess('OTP sent to your email! Please check your inbox.');
         setShowOtp(true);
-      } else if (res.data.token) {
-        setSuccess('Login successful! Redirecting...');
-        localStorage.setItem('token', res.data.token);
+      } else if (res.data.accessToken || res.data.token) {
+        const token = res.data.accessToken || res.data.token;
+        showSuccess('Login successful! Redirecting...');
+        
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(res.data.user));
+        
         if (rememberMe) {
           localStorage.setItem('rememberedEmail', email);
+        } else {
+          localStorage.removeItem('rememberedEmail');
         }
         
         setTimeout(() => {
-          if (res.data.role === 'admin') navigate('/admin/dashboard');
-          else if (res.data.role === 'recruiter') navigate('/recruiter/dashboard');
-          else navigate('/candidate/dashboard');
+          const userRole = res.data.user?.role || 'candidate';
+          if (userRole === 'admin') {
+            navigate('/admin/dashboard');
+          } else if (userRole === 'recruiter') {
+            navigate('/recruiter/dashboard');
+          } else {
+            navigate('/candidate/dashboard');
+          }
         }, 1500);
-      } else {
-        setError(res.data.message || 'Login failed');
       }
     } catch (error) {
-      setError(error.response?.data?.message || 'Login failed. Please check your credentials.');
+      console.error('Login error:', error);
+      if (error.response?.status === 401) {
+        showError('Invalid email or password. Please try again.');
+      } else if (error.response?.data?.message) {
+        showError(error.response.data.message);
+      } else {
+        showError('Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleOtpVerify = async () => {
-    setError('');
-    setSuccess('');
+    if (!otp || otp.length !== 6) {
+      showError('Please enter a valid 6-digit OTP.');
+      return;
+    }
+    
     setIsLoading(true);
+    setError('');
     
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/verify-otp', { email, otp });
-      if (res.data.message === 'OTP Verified') {
-        setSuccess('OTP verified! Login successful!');
-        localStorage.setItem('token', res.data.token);
+      const res = await axios.post(`${API_URL}/auth/verify-login-otp`, { email, otp });
+      
+      if (res.data.accessToken || res.data.token) {
+        const token = res.data.accessToken || res.data.token;
+        showSuccess('OTP verified successfully! Redirecting...');
+        
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(res.data.user));
+        
+        if (rememberMe) {
+          localStorage.setItem('rememberedEmail', email);
+        }
         
         setTimeout(() => {
-          navigate('/admin/dashboard');
+          const userRole = res.data.user?.role || 'candidate';
+          if (userRole === 'admin') {
+            navigate('/admin/dashboard');
+          } else if (userRole === 'recruiter') {
+            navigate('/recruiter/dashboard');
+          } else {
+            navigate('/candidate/dashboard');
+          }
         }, 1500);
-      } else {
-        setError('Invalid OTP. Please try again.');
       }
     } catch (error) {
-      setError(error.response?.data?.message || 'OTP verification failed. Please try again.');
+      console.error('OTP verification error:', error);
+      showError(error.response?.data?.message || 'Invalid OTP. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   // Load remembered email on component mount
   useEffect(() => {
     const rememberedEmail = localStorage.getItem('rememberedEmail');
@@ -305,7 +357,10 @@ const Login = () => {
                   <button 
                     type="button"
                     className="social-btn google-btn" 
-                    onClick={()=>window.location.href='http://localhost:5000/api/auth/google'}
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      window.location.href = `${API_URL}/oauth2/authorize/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                    }}
                     title="Continue with Google"
                   >
                     {googleLogo}
@@ -313,7 +368,10 @@ const Login = () => {
                   <button 
                     type="button"
                     className="social-btn github-btn" 
-                    onClick={()=>window.location.href='http://localhost:5000/api/auth/github'}
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      window.location.href = `${API_URL}/oauth2/authorize/github?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                    }}
                     title="Continue with GitHub"
                   >
                     {githubLogo}
