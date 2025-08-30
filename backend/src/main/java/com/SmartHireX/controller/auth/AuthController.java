@@ -105,17 +105,24 @@ public class AuthController {
             // OTP verification is handled separately via /verify-registration-otp endpoint
             // No need to verify OTP again here since it was already verified
             
-            // Enforce recruiter verification policy
+            // Enforce verification policy based on role
             String role = registerRequest.getRole() != null ? registerRequest.getRole().trim().toLowerCase() : "candidate";
             boolean isRecruiter = "recruiter".equalsIgnoreCase(role);
-            // Force verified=false for recruiters, true for others unless explicitly provided
-            registerRequest.setRole(role);
-            if (isRecruiter) {
-                registerRequest.setVerified(false);
-            }
-
-            // Determine if registration came from OAuth2 pre-verified flow
             boolean isOAuth2 = Boolean.TRUE.equals(registerRequest.getOauth2());
+            
+            // Set verification status
+            if (isOAuth2) {
+                // OAuth2 users are considered verified
+                registerRequest.setVerified(true);
+            } else if (isRecruiter) {
+                // Recruiters need admin approval
+                registerRequest.setVerified(false);
+            } else {
+                // Regular users are verified by default after OTP verification
+                registerRequest.setVerified(true);
+            }
+            
+            registerRequest.setRole(role);
 
             // Validate fields conditionally
             String phone = registerRequest.getPhone();
