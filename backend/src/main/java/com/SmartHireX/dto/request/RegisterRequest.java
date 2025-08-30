@@ -2,7 +2,6 @@ package com.SmartHireX.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 
 public class RegisterRequest {
     @NotBlank(message = "First name is required")
@@ -15,16 +14,16 @@ public class RegisterRequest {
     @Email(message = "Email should be valid")
     private String email;
 
-    @NotBlank(message = "Phone number is required")
+    // Phone is optional for OAuth2-based registration
     private String phone;
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 6, message = "Password must be at least 6 characters long")
+    // Password is optional for OAuth2-based registration. If provided, controller will validate length
     private String password;
 
     private String role = "candidate";
     private boolean verified = false;
     private String otp; // Optional OTP for registration verification
+    private Boolean oauth2 = false; // Indicates registration flow initiated via OAuth2
 
     // Getters and Setters
     public String getFirstName() {
@@ -89,5 +88,13 @@ public class RegisterRequest {
 
     public void setOtp(String otp) {
         this.otp = otp;
+    }
+
+    public Boolean getOauth2() {
+        return oauth2;
+    }
+
+    public void setOauth2(Boolean oauth2) {
+        this.oauth2 = oauth2;
     }
 }

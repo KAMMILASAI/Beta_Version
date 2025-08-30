@@ -105,27 +105,74 @@ public class AuthController {
             // OTP verification is handled separately via /verify-registration-otp endpoint
             // No need to verify OTP again here since it was already verified
             
-            User user = userService.createUser(registerRequest);
-            
-            // Send welcome email
-            try {
-                emailService.sendWelcomeEmail(user.getEmail(), user.getFirstName());
-            } catch (Exception e) {
-                logger.warn("Failed to send welcome email to: {}", user.getEmail(), e);
+            // Enforce recruiter verification policy
+            String role = registerRequest.getRole() != null ? registerRequest.getRole().trim().toLowerCase() : "candidate";
+            boolean isRecruiter = "recruiter".equalsIgnoreCase(role);
+            // Force verified=false for recruiters, true for others unless explicitly provided
+            registerRequest.setRole(role);
+            if (isRecruiter) {
+                registerRequest.setVerified(false);
             }
-            
-            // Authenticate the user
-            Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                    registerRequest.getEmail(),
-                    registerRequest.getPassword()
-                )
-            );
-            
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            String jwt = tokenProvider.generateToken(authentication);
-            
-            return ResponseEntity.ok(new AuthResponse(jwt, "Bearer", user));
+
+            // Determine if registration came from OAuth2 pre-verified flow
+            boolean isOAuth2 = Boolean.TRUE.equals(registerRequest.getOauth2());
+
+            // Validate fields conditionally
+            String phone = registerRequest.getPhone();
+            String password = registerRequest.getPassword();
+            if (!isOAuth2) {
+                if (phone == null || phone.trim().isEmpty()) {
+                    return ResponseEntity.badRequest().body(
+                        Collections.singletonMap("message", "Phone number is required")
+                    );
+                }
+                if (password == null || password.trim().length() < 6) {
+                    return ResponseEntity.badRequest().body(
+                        Collections.singletonMap("message", "Password must be at least 6 characters long")
+                    );
+                }
+            } else {
+                // If OAuth2 flow and password provided, enforce minimal length
+                if (password != null && !password.trim().isEmpty() && password.trim().length() < 6) {
+                    return ResponseEntity.badRequest().body(
+                        Collections.singletonMap("message", "Password must be at least 6 characters long")
+                    );
+                }
+            }
+
+            User user = userService.createUser(registerRequest);
+
+            // Send appropriate email
+            try {
+                String firstName = user.getFirstName() != null ? user.getFirstName() : "User";
+                if (isRecruiter) {
+                    emailService.sendRecruiterPendingEmail(user.getEmail(), firstName);
+                } else {
+                    emailService.sendWelcomeEmail(user.getEmail(), firstName);
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to send registration email to: {}", user.getEmail(), e);
+            }
+
+            // If user is verified (non-recruiter), authenticate and return JWT
+            if (Boolean.TRUE.equals(user.isEnabled())) {
+                if (!isOAuth2 && registerRequest.getPassword() != null) {
+                    Authentication authentication = authenticationManager.authenticate(
+                        new UsernamePasswordAuthenticationToken(
+                            registerRequest.getEmail(),
+                            registerRequest.getPassword()
+                        )
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    String jwt = tokenProvider.generateToken(authentication);
+                    return ResponseEntity.ok(new AuthResponse(jwt, "Bearer", user));
+                }
+                // OAuth2 registrations without password: return success without JWT
+                return ResponseEntity.ok(Collections.singletonMap("message", "Registration completed successfully. Please login using OAuth2."));
+            }
+
+            // For recruiters (pending approval), return informational message
+            return ResponseEntity.ok(Collections.singletonMap("message", "Registration successful. Your recruiter account is pending admin approval."));
         } catch (Exception e) {
             logger.error("Error during registration", e);
             return ResponseEntity.badRequest().body(
@@ -136,20 +183,38 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(
-                loginRequest.getEmail(),
-                loginRequest.getPassword()
-            )
-        );
+        try {
+            // Normalize email to avoid case/space issues
+            String email = loginRequest.getEmail() != null ? loginRequest.getEmail().trim().toLowerCase() : "";
+            String password = loginRequest.getPassword() != null ? loginRequest.getPassword().trim() : "";
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwt = tokenProvider.generateToken(authentication);
-        
-        User user = userService.findByEmail(loginRequest.getEmail())
-            .orElseThrow(() -> new RuntimeException("User not found"));
-            
-        return ResponseEntity.ok(new AuthResponse(jwt, "Bearer", user));
+            logger.info("Attempting login for email: {}", email);
+
+            Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(email, password)
+            );
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String jwt = tokenProvider.generateToken(authentication);
+
+            User user = userService.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+            logger.info("Login successful for email: {}", email);
+            return ResponseEntity.ok(new AuthResponse(jwt, "Bearer", user));
+        } catch (org.springframework.security.authentication.DisabledException ex) {
+            logger.warn("Login failed (disabled) for email: {}", loginRequest.getEmail(), ex);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Collections.singletonMap("message", "User is disabled or not verified"));
+        } catch (org.springframework.security.authentication.BadCredentialsException ex) {
+            logger.warn("Login failed (bad credentials) for email: {}", loginRequest.getEmail());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Collections.singletonMap("message", "Invalid email or password"));
+        } catch (Exception ex) {
+            logger.error("Unexpected error during login for email: {}", loginRequest.getEmail(), ex);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Collections.singletonMap("message", "Authentication failed"));
+        }
     }
 
     // Send OTP for forgot password

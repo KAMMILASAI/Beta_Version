@@ -31,7 +31,7 @@ public class OAuth2Controller {
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;
 
-    @Value("${app.frontend.url:http://localhost:5173}")
+    @Value("${app.frontend.url:https://smarthirex.netlify.app}")
     private String frontendUrl;
 
     private final JwtTokenProvider tokenProvider;

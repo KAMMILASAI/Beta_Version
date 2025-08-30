@@ -67,6 +67,27 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Override
+    public void sendRecruiterPendingEmail(String toEmail, String userName) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("SmartHireX - Recruiter Registration Pending Approval");
+
+            String htmlContent = buildRecruiterPendingEmailTemplate(userName);
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            logger.info("Recruiter pending approval email sent successfully to: {}", toEmail);
+        } catch (MessagingException e) {
+            logger.error("Failed to send recruiter pending email to: {}", toEmail, e);
+            throw new RuntimeException("Failed to send recruiter pending email", e);
+        }
+    }
+
+    @Override
     public void sendSimpleEmail(String toEmail, String subject, String text) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -176,7 +197,7 @@ public class EmailServiceImpl implements EmailService {
                         </ul>
                         
                         <div style="text-align: center;">
-                            <a href="http://localhost:5173/dashboard" class="cta-button">Get Started</a>
+                            <a href="https://smarthirex.netlify.app/dashboard" class="cta-button">Get Started</a>
                         </div>
                         
                         <p>If you have any questions or need assistance, our support team is here to help!</p>
@@ -190,5 +211,47 @@ public class EmailServiceImpl implements EmailService {
             </body>
             </html>
             """, userName, userName);
+    }
+
+    private String buildRecruiterPendingEmailTemplate(String userName) {
+        return String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Recruiter Registration Pending</title>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #f59e0b 0%%, #ef4444 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .status-box { background: white; padding: 20px; text-align: left; margin: 20px 0; border-radius: 10px; border: 1px solid #ddd; }
+                    .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>SmartHireX</h1>
+                        <p>Recruiter Registration Pending Approval</p>
+                    </div>
+                    <div class="content">
+                        <h2>Hello %s!</h2>
+                        <p>Thank you for registering as a recruiter on SmartHireX.</p>
+                        <div class="status-box">
+                            <p>Your account is currently <strong>pending admin approval</strong>. Our team will review your request shortly.</p>
+                            <p>You'll receive a confirmation email once your account is approved and activated.</p>
+                        </div>
+                        <p>In the meantime, feel free to explore our platform. You will gain full recruiter access after approval.</p>
+                        <p>If you have any questions, contact our support team.</p>
+                        <div class="footer">
+                            <p>© 2024 SmartHireX. All rights reserved.</p>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """, userName);
     }
 }

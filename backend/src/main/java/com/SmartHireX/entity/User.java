@@ -10,6 +10,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -22,6 +23,7 @@ public class User implements UserDetails {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty("_id")
     private Long id;
 
     @Size(max = 50)
@@ -45,12 +47,14 @@ public class User implements UserDetails {
     @Size(max = 50)
     private String role = "candidate";
 
+    // Recruiter profile fields (optional)
     private boolean verified = false;
     
     private boolean emailVerified = false;
     
     @Size(max = 50)
     private String oAuth2Provider;
+
 
     @CreationTimestamp
     @Column(updatable = false)

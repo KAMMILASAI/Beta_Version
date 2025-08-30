@@ -16,6 +16,13 @@ public interface EmailService {
      * @param userName The name of the user
      */
     void sendWelcomeEmail(String toEmail, String userName);
+
+    /**
+     * Send email indicating recruiter registration is pending admin approval
+     * @param toEmail The recipient email address
+     * @param userName The name of the user
+     */
+    void sendRecruiterPendingEmail(String toEmail, String userName);
     
     /**
      * Send simple text email

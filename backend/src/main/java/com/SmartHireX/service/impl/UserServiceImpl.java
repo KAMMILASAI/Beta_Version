@@ -29,8 +29,22 @@ public class UserServiceImpl implements UserService {
         user.setFirstName(registerRequest.getFirstName());
         user.setLastName(registerRequest.getLastName());
         user.setEmail(registerRequest.getEmail());
-        user.setPhone(registerRequest.getPhone());
-        user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+        // Allow null phone for OAuth2; persist empty string if null to avoid NPEs
+        user.setPhone(registerRequest.getPhone() != null ? registerRequest.getPhone() : "");
+
+        // If password is absent (OAuth2 registration), generate a secure random one
+        String rawPassword = registerRequest.getPassword();
+        if (rawPassword == null || rawPassword.trim().isEmpty()) {
+            java.security.SecureRandom sr = new java.security.SecureRandom();
+            byte[] bytes = new byte[12];
+            sr.nextBytes(bytes);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : bytes) {
+                sb.append(String.format("%02x", b));
+            }
+            rawPassword = sb.toString();
+        }
+        user.setPassword(passwordEncoder.encode(rawPassword));
         user.setRole(registerRequest.getRole());
         user.setVerified(registerRequest.isVerified());
         
@@ -39,12 +53,12 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public Optional<User> findByEmail(String email) {
-        return userRepository.findByEmail(email);
+        return userRepository.findByEmailIgnoreCase(email);
     }
 
     @Override
     public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
+        return userRepository.existsByEmailIgnoreCase(email);
     }
 
     @Override
@@ -54,7 +68,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void resetPassword(String email, String newPassword) {
-        Optional<User> userOptional = userRepository.findByEmail(email);
+        Optional<User> userOptional = userRepository.findByEmailIgnoreCase(email);
         if (userOptional.isPresent()) {
             User user = userOptional.get();
             user.setPassword(passwordEncoder.encode(newPassword));
@@ -74,19 +88,25 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
         
-        // Update user fields if they are provided in the request
-        if (updateRequest.getFirstName() != null) {
-            user.setFirstName(updateRequest.getFirstName());
+        // Name handling: allow either separate first/last or a combined 'name'
+        if (updateRequest.getName() != null && !updateRequest.getName().trim().isEmpty()) {
+            String name = updateRequest.getName().trim();
+            String[] parts = name.split("\\s+", 2);
+            user.setFirstName(parts[0]);
+            user.setLastName(parts.length > 1 ? parts[1] : "");
+        } else {
+            if (updateRequest.getFirstName() != null) {
+                user.setFirstName(updateRequest.getFirstName());
+            }
+            if (updateRequest.getLastName() != null) {
+                user.setLastName(updateRequest.getLastName());
+            }
         }
-        
-        if (updateRequest.getLastName() != null) {
-            user.setLastName(updateRequest.getLastName());
-        }
-        
+
         if (updateRequest.getPhone() != null) {
             user.setPhone(updateRequest.getPhone());
         }
-        
+
         return userRepository.save(user);
     }
 }

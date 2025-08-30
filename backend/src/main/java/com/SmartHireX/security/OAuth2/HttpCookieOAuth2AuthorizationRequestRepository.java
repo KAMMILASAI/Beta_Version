@@ -15,6 +15,8 @@ import java.util.Optional;
 public class HttpCookieOAuth2AuthorizationRequestRepository implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
     public static final String OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME = "oauth2_auth_request";
     public static final String REDIRECT_URI_PARAM_COOKIE_NAME = "redirect_uri";
+    public static final String ROLE_PARAM_COOKIE_NAME = "desired_role";
+    public static final String SOURCE_PARAM_COOKIE_NAME = "oauth_source";
     private static final int cookieExpireSeconds = 180;
 
     @Override
@@ -38,6 +40,18 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
         if (StringUtils.isNotBlank(redirectUriAfterLogin)) {
             CookieUtils.addCookie(response, REDIRECT_URI_PARAM_COOKIE_NAME, redirectUriAfterLogin, cookieExpireSeconds);
         }
+
+        // Persist desired role if provided (candidate/recruiter)
+        String desiredRole = request.getParameter("role");
+        if (StringUtils.isNotBlank(desiredRole)) {
+            CookieUtils.addCookie(response, ROLE_PARAM_COOKIE_NAME, desiredRole, cookieExpireSeconds);
+        }
+
+        // Persist source if provided (e.g., 'register' or 'login')
+        String source = request.getParameter("source");
+        if (StringUtils.isNotBlank(source)) {
+            CookieUtils.addCookie(response, SOURCE_PARAM_COOKIE_NAME, source, cookieExpireSeconds);
+        }
     }
 
     @Override
@@ -50,5 +64,7 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
     public void removeAuthorizationRequestCookies(HttpServletRequest request, HttpServletResponse response) {
         CookieUtils.deleteCookie(request, response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME);
         CookieUtils.deleteCookie(request, response, REDIRECT_URI_PARAM_COOKIE_NAME);
+        CookieUtils.deleteCookie(request, response, ROLE_PARAM_COOKIE_NAME);
+        CookieUtils.deleteCookie(request, response, SOURCE_PARAM_COOKIE_NAME);
     }
 }

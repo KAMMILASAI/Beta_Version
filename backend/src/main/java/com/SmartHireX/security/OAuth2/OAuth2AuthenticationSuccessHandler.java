@@ -42,7 +42,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         this.userService = userService;
         this.httpCookieOAuth2AuthorizationRequestRepository = httpCookieOAuth2AuthorizationRequestRepository;
         // Force frontend redirect URL
-        setDefaultTargetUrl("http://localhost:5173/oauth2/redirect");
+        setDefaultTargetUrl("https://smarthirex.netlify.app/oauth2/redirect");
         setAlwaysUseDefaultTargetUrl(false);
     }
 
@@ -61,12 +61,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
     protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         // Always redirect to frontend - ignore any stored redirect URIs that might point to backend
-        String targetUrl = "http://localhost:5173/oauth2/redirect";
+        String targetUrl = "https://smarthirex.netlify.app/oauth2/redirect";
         
         System.out.println("OAuth2 Success - Force redirecting to frontend: " + targetUrl);
-
-        // Generate JWT token
-        String token = tokenProvider.generateToken(authentication);
 
         // Get user information
         OAuth2User oAuth2User = (OAuth2User) authentication.getPrincipal();
@@ -74,10 +71,81 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         
         Optional<User> userOptional = userService.findByEmail(email);
         if (userOptional.isEmpty()) {
-            throw new RuntimeException("User not found after OAuth2 authentication");
+            // New OAuth2 user: send to register with prefilled info
+            String name = oAuth2User.getAttribute("name");
+            String desiredRole = null;
+            Optional<Cookie> roleCookie = CookieUtils.getCookie(request, HttpCookieOAuth2AuthorizationRequestRepository.ROLE_PARAM_COOKIE_NAME);
+            if (roleCookie.isPresent()) {
+                String rc = roleCookie.get().getValue();
+                if (rc != null) {
+                    rc = rc.trim().toLowerCase();
+                    if ("candidate".equals(rc) || "recruiter".equals(rc) || "admin".equals(rc)) {
+                        desiredRole = rc;
+                    }
+                }
+            }
+
+            // Check OAuth2 initiation source
+            String source = null;
+            Optional<Cookie> sourceCookie = CookieUtils.getCookie(request, HttpCookieOAuth2AuthorizationRequestRepository.SOURCE_PARAM_COOKIE_NAME);
+            if (sourceCookie.isPresent()) {
+                source = sourceCookie.get().getValue();
+            }
+
+            UriComponentsBuilder builder = UriComponentsBuilder.fromUriString("https://smarthirex.netlify.app/register")
+                    .queryParam("oauth2User", true)
+                    .queryParam("email", email)
+                    .queryParam("name", name)
+                    .queryParam("role", desiredRole);
+            // Only show error hint if OAuth2 was started from Login page (not Register)
+            if (source == null || !"register".equalsIgnoreCase(source)) {
+                builder.queryParam("error", "oauth_register_required");
+            }
+            String registerUrl = builder.build().toUriString();
+            System.out.println("OAuth2 Success - New user, redirecting to register: " + registerUrl);
+            return registerUrl;
         }
         
         User user = userOptional.get();
+
+        // Try to read desired role from cookie (set at authorization step)
+        String desiredRole = null;
+        Optional<Cookie> roleCookie = CookieUtils.getCookie(request, HttpCookieOAuth2AuthorizationRequestRepository.ROLE_PARAM_COOKIE_NAME);
+        if (roleCookie.isPresent()) {
+            String rc = roleCookie.get().getValue();
+            if (rc != null) {
+                rc = rc.trim().toLowerCase();
+                if ("candidate".equals(rc) || "recruiter".equals(rc) || "admin".equals(rc)) {
+                    desiredRole = rc;
+                }
+            }
+        }
+
+        boolean userChanged = false;
+        if (desiredRole != null && !desiredRole.equalsIgnoreCase(user.getRole())) {
+            user.setRole(desiredRole);
+            userChanged = true;
+        }
+        // Do NOT change verified flag here. Admin approval sets it; we only respect it.
+        if (userChanged) {
+            userService.save(user);
+        }
+
+        // If recruiter and not verified, do NOT issue token; redirect with pending approval info
+        if ("recruiter".equalsIgnoreCase(user.getRole()) && !user.isEnabled()) {
+            String pendingUrl = UriComponentsBuilder.fromUriString(targetUrl)
+                    .queryParam("error", "pending_approval")
+                    .queryParam("email", user.getEmail())
+                    .queryParam("firstName", user.getFirstName())
+                    .queryParam("lastName", user.getLastName())
+                    .queryParam("role", user.getRole())
+                    .build().toUriString();
+            System.out.println("OAuth2 Success - Recruiter pending approval, redirecting to: " + pendingUrl);
+            return pendingUrl;
+        }
+
+        // Generate JWT token
+        String token = tokenProvider.generateToken(authentication);
 
         String finalUrl = UriComponentsBuilder.fromUriString(targetUrl)
                 .queryParam("token", token)

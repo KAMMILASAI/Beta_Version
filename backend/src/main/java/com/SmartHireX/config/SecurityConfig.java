@@ -83,46 +83,46 @@ public class SecurityConfig {
                     "/auth/register",
                     "/auth/login",
                     "/auth/forgot-password",
-                    "/auth/reset-password",
-                    "/auth/**"
+                    "/auth/reset-password"
                 ).permitAll();
                 
                 // OAuth2 endpoints
                 auth.requestMatchers(
-                    "/oauth2/**",
-                    "/login/oauth2/**"
+                    "/oauth2/authorize/**",
+                    "/oauth2/authorization/**", 
+                    "/oauth2/user",
+                    "/login/oauth2/code/*"
                 ).permitAll();
                 
-                // OAuth2 login endpoints
-                auth.requestMatchers(
-                    "/oauth2/authorize/**",
-                    "/oauth2/authorization/**",
-                    "/login/oauth2/code/**",
-                    "/oauth2/callback/**"
-                ).permitAll();
                 
                 // Public endpoints
                 auth.requestMatchers(
                     "/",
                     "/error",
-                    "/favicon.ico"
+                    "/favicon.ico",
+                    // Config public endpoints
+                    "/config/support-upi",
+                    // Public job apply endpoints (context path /api is stripped)
+                    "/jobs/**",
+                    // Presence endpoints for online counter
+                    "/presence/**"
                 ).permitAll();
                 
                 // Static resources
                 auth.requestMatchers(
-                    "/**/*.png",
-                    "/**/*.gif", 
-                    "/**/*.svg",
-                    "/**/*.jpg",
-                    "/**/*.html",
-                    "/**/*.css",
-                    "/**/*.js"
+                    "*.png",
+                    "*.gif", 
+                    "*.svg",
+                    "*.jpg",
+                    "*.html",
+                    "*.css",
+                    "*.js"
                 ).permitAll();
                 
                 // Swagger/OpenAPI docs
                 auth.requestMatchers(
-                    "/v3/api-docs/**",
-                    "/swagger-ui/**",
+                    "/v3/api-docs",
+                    "/swagger-ui",
                     "/swagger-ui.html"
                 ).permitAll();
                 
@@ -154,11 +154,12 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(
+            "https://smarthirex.netlify.app",
             "http://localhost:5173",
             "http://localhost:3000",
             "http://localhost:8080"
         ));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
