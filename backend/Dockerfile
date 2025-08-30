@@ -1,7 +1,11 @@
 # Build stage
 FROM eclipse-temurin:17-jdk-alpine as builder
 WORKDIR /app
-COPY . .
+
+# Copy ALL files including hidden .mvn directory
+COPY . ./
+
+# Give execute permission and run build
 RUN chmod +x ./mvnw
 RUN ./mvnw clean package -DskipTests
 
