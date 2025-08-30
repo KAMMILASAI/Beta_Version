@@ -17,7 +17,7 @@ export default function Requests() {
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/admin/pending-recruiters', {
+      const res = await axios.get('http://localhost:8080/api/admin/pending-recruiters', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setPendingRecruiters(res.data.requests || []);
@@ -33,7 +33,7 @@ export default function Requests() {
     setProcessingRequest(userId);
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/admin/approve-recruiter/${userId}`, 
+      await axios.post(`http://localhost:8080/api/admin/approve-recruiter/${userId}`, 
         { adminMessage }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -57,7 +57,7 @@ export default function Requests() {
     setProcessingRequest(userId);
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:5000/api/admin/reject-recruiter/${userId}`, 
+      await axios.post(`http://localhost:8080/api/admin/reject-recruiter/${userId}`, 
         { adminMessage }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -75,30 +75,19 @@ export default function Requests() {
     <div className="admin-dashboard-home">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h2>Recruiter Requests</h2>
-        <button 
-          onClick={fetchPendingRecruiters}
-          style={{
-            background: '#0dcaf0',
-            color: 'white',
-            border: 'none',
-            padding: '0.5rem 1rem',
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}
+        <div 
+          className={`refresh-icon ${loading ? 'spinning' : ''}`}
+          title={loading ? 'Refreshing...' : 'Refresh'}
+          aria-label="Refresh"
+          role="button"
+          onClick={() => !loading && fetchPendingRecruiters()}
         >
-          🔄 Refresh
-        </button>
+          <span className="refresh-glyph">↻</span>
+        </div>
       </div>
 
       {error && (
-        <div style={{ 
-          color: '#dc3545', 
-          background: '#f8d7da', 
-          padding: '1rem', 
-          borderRadius: '6px', 
-          marginBottom: '1rem',
-          border: '1px solid #f5c6cb'
-        }}>
+        <div className="error-banner dark">
           {error}
         </div>
       )}

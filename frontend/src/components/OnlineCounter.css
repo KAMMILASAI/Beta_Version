@@ -19,6 +19,8 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
   animation: slideInUp 0.5s ease-out;
+  cursor: pointer;
+  position: fixed; /* ensure positioning context for tooltip */
 }
 
 .online-counter-simple:hover {
@@ -26,21 +28,16 @@
   box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
 }
 
-/* Green Blinking Dot */
-.online-dot {
-  width: 10px;
-  height: 10px;
-  background: #22c55e;
-  border-radius: 50%;
+/* Blinking Eye Icon */
+.online-eye {
+  width: 18px;
+  height: 18px;
+  color: #22c55e;
   animation: blink 2s infinite;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.6));
 }
 
-/* Online Text */
-.online-text {
-  color: #e5e7eb;
-  font-weight: 500;
-}
+/* Remove unused text label styles */
 
 /* Count Number */
 .online-count {
@@ -52,6 +49,60 @@
   font-size: 15px;
   min-width: 20px;
   text-align: center;
+}
+
+/* State variants */
+.online-counter-simple.collapsed {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  gap: 0;
+}
+
+.online-counter-simple.revealed {
+  padding: 8px 12px;
+  min-width: 56px;
+  justify-content: center;
+}
+
+/* Tooltip shown on hover */
+.online-tooltip {
+  position: absolute;
+  bottom: 46px; /* above the collapsed circle */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  pointer-events: none; /* keep hover state on parent */
+}
+
+.online-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+}
+
+@media (max-width: 768px) {
+  .online-tooltip {
+    bottom: 42px;
+    font-size: 11px;
+    padding: 5px 8px;
+  }
 }
 
 /* Animations */
@@ -107,9 +158,9 @@
     font-size: 13px;
   }
   
-  .online-dot {
-    width: 8px;
-    height: 8px;
+  .online-eye {
+    width: 16px;
+    height: 16px;
   }
   
   .online-count {

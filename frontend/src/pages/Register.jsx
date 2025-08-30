@@ -16,6 +16,12 @@ const googleLogo = (
   </svg>
 );
 
+const appleLogo = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="#000" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16.365 1.43c0 1.14-.47 2.22-1.11 3.02-.66.82-1.77 1.45-2.87 1.36-.11-1.1.48-2.23 1.11-2.94.7-.85 1.93-1.46 2.87-1.44zM20.94 17.06c-.6 1.39-.9 1.99-1.7 3.21-1.1 1.67-2.65 3.75-4.55 3.76-1.06.02-1.78-.71-3.12-.71-1.35 0-2.13.69-3.2.72-1.9.07-3.35-1.8-4.45-3.46-2.43-3.7-2.69-8.03-1.19-10.34 1.07-1.7 2.76-2.68 4.35-2.68 1.62 0 2.64.73 3.98.73 1.31 0 2.09-.73 3.97-.73 1.47 0 3.02.8 4.09 2.19-3.6 1.98-3.02 7.13.82 8.11z"/>
+  </svg>
+);
+
 const githubLogo = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="#333">
     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
@@ -46,10 +52,13 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
+  const [isOAuth2, setIsOAuth2] = useState(false);
   const [showOtpInput, setShowOtpInput] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
@@ -73,6 +82,7 @@ const Register = () => {
     if (oauth2User && oauthEmail) {
       setEmail(oauthEmail);
       setEmailVerified(true);
+      setIsOAuth2(true);
       setShowOtpInput(false);
       showInfo('Email verified via OAuth2. Please complete your registration.');
       
@@ -118,15 +128,62 @@ const Register = () => {
         setSuccess('OTP has been sent to your email');
         setShowOtpInput(true);
       } else {
-        setError(res.data.message || 'Failed to send OTP. Please try again.');
+        const msg = res.data.message || 'Failed to send OTP. Please try again.';
+        showError(msg);
+        setError(msg);
+        setShowOtpInput(false);
       }
     } catch (err) {
       const errorMessage = err.response?.data?.message || 
                          err.response?.data?.error || 
                          'Failed to send OTP. Please try again.';
+      showError(errorMessage);
       setError(errorMessage);
+      setShowOtpInput(false);
     } finally {
       setLoadingOtp(false);
+    }
+  };
+
+  const handleOtpVerify = async (e) => {
+    e.preventDefault();
+    
+    if (!otp) {
+      setError('Please enter the OTP sent to your email');
+      return;
+    }
+    
+    // Basic OTP validation
+    const otpRegex = /^\d{6}$/;
+    if (!otpRegex.test(otp)) {
+      setError('Please enter a valid 6-digit OTP');
+      return;
+    }
+    
+    setError('');
+    setIsLoading(true);
+    
+    try {
+      const res = await axios.post(`${API_URL}/auth/verify-registration-otp`, { 
+        email, 
+        otp
+      });
+      
+      if (res.data.message === 'OTP verified successfully' || res.data.success) {
+        showSuccess('Email verified successfully!');
+        setEmailVerified(true);
+        setShowOtp(false);
+        setShowOtpInput(false);
+      } else {
+        setError(res.data.message || 'Invalid OTP. Please try again.');
+      }
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || 
+                         err.response?.data?.error || 
+                         'Failed to verify OTP. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -185,17 +242,31 @@ const Register = () => {
       showError('Please verify your email first.');
       return;
     }
-    if (!phone.trim()) {
-      showError('Phone number is required.');
-      return;
-    }
-    if (password.length < 6) {
-      showError('Password must be at least 6 characters long.');
-      return;
-    }
-    if (password !== confirm) {
-      showError('Passwords do not match.');
-      return;
+    if (!isOAuth2) {
+      if (!phone.trim()) {
+        showError('Phone number is required.');
+        return;
+      }
+      if (password.length < 6) {
+        showError('Password must be at least 6 characters long.');
+        return;
+      }
+      if (password !== confirm) {
+        showError('Passwords do not match.');
+        return;
+      }
+    } else {
+      // If coming from OAuth2, allow empty phone/password. If password provided, ensure match.
+      if (password || confirm) {
+        if (password.length < 6) {
+          showError('Password must be at least 6 characters long.');
+          return;
+        }
+        if (password !== confirm) {
+          showError('Passwords do not match.');
+          return;
+        }
+      }
     }
     
     setIsLoading(true);
@@ -206,16 +277,18 @@ const Register = () => {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
-        phone: phone.trim(),
-        password,
         role: role || 'candidate',
-        otp: otp, // Include OTP for backend verification
-        verified: true // Since we've verified with OTP
+        otp: otp, // Include OTP for backend verification (not used for OAuth2)
+        verified: true // Since we've verified via OTP or OAuth2
       };
+      if (phone.trim()) userData.phone = phone.trim();
+      if (password) userData.password = password;
+      if (isOAuth2) userData.oauth2 = true;
       
       const res = await axios.post(`${API_URL}/auth/register`, userData);
       
-      if (res.data.message === 'User registered successfully') {
+      // Success path: token present OR success message
+      if (res.data.accessToken || res.data.token || res.data.message) {
         // Check if we got a token for auto-login
         const token = res.data.accessToken || res.data.token;
         
@@ -246,8 +319,9 @@ const Register = () => {
             }
           }, 1500);
         } else {
-          // Registration successful but no token - redirect to login
-          showSuccess('Registration successful! Please login with your credentials.');
+          // Registration successful but no token (e.g., recruiter pending approval)
+          const msg = res.data.message || 'Registration successful! Please login with your credentials.';
+          showSuccess(msg);
           
           // Clear form
           setFirstName('');
@@ -258,7 +332,7 @@ const Register = () => {
           setConfirm('');
           setEmailVerified(false);
           
-          setTimeout(() => navigate('/'), 1500);
+          setTimeout(() => navigate('/login'), 1500);
         }
       } else {
         showError(res.data.message || 'Registration failed. Please try again.');
@@ -277,41 +351,34 @@ const Register = () => {
 
   return (
     <div className="auth-container">
+      {/* Left: Register form */}
       <div className="left-box">
-        <div className="floating-elements">
-          <div className="floating-element element-1"></div>
-          <div className="floating-element element-2"></div>
-          <div className="floating-element element-3"></div>
-        </div>
-        <img src="/logo.png" alt="SmartHireX Logo" className="auth-logo" />
-        <h1>Create Your <span>SmartHireX</span> Account</h1>
-        <p className="tagline">Join our platform to unlock new opportunities</p>
-        
-        {/* Simple Role Selection on Left Side */}
-        <div className="role-selection-simple">
-          <h3>Select Your Role</h3>
-          <div className="role-buttons">
-            <button 
-              type="button"
-              className={`role-btn ${role === 'candidate' ? 'active' : ''}`}
-              onClick={() => setRole('candidate')}
-            >
-              👤 Candidate
-            </button>
-            <button 
-              type="button"
-              className={`role-btn ${role === 'recruiter' ? 'active' : ''}`}
-              onClick={() => setRole('recruiter')}
-            >
-              💼 Recruiter
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="right-box">
         <div className="auth-card">
+          {/* Role toggle at top of form */}
+          <div className="role-toggle" aria-label="Select role">
+            <label className="role-switch">
+              <input
+                type="checkbox"
+                className="role-switch-input"
+                checked={role === 'recruiter'}
+                onChange={(e) => setRole(e.target.checked ? 'recruiter' : 'candidate')}
+                aria-checked={role === 'recruiter'}
+                aria-label="Toggle between Candidate and Recruiter"
+              />
+              <span className="role-switch-track">
+                <span className={`role-switch-option left ${role === 'candidate' ? 'active' : ''}`}>
+                  <span className="role-text">Candidate</span>
+                </span>
+                <span className={`role-switch-option right ${role === 'recruiter' ? 'active' : ''}`}>
+                  <span className="role-text">Recruiter</span>
+                </span>
+                <span className={`role-switch-knob ${role === 'recruiter' ? 'right' : 'left'}`}></span>
+              </span>
+            </label>
+          </div>
+
           <h2>Sign Up as {role === 'candidate' ? 'Candidate' : 'Recruiter'}</h2>
-          
+
           <form onSubmit={handleRegister} className="auth-form">
             <div className="input-row">
               <div className="input-container">
@@ -323,46 +390,44 @@ const Register = () => {
                 <label htmlFor="lastName">Last Name</label>
               </div>
             </div>
-            
-            {/* Email Verification Section */}
-            <div className="email-verify-container">
-              <div className="input-container" style={{flex:1}}>
-                <input 
-                  id="registerEmail"
-                  type="email"
-                  value={email} 
-                  onChange={e=>setEmail(e.target.value)} 
-                  placeholder=" " 
-                  disabled={emailVerified}
-                  style={{opacity: emailVerified ? 0.7 : 1}}
-                  required
-                />
-                <label htmlFor="registerEmail">Email</label>
+          
+          {/* Email + OTP side-by-side when OTP is shown */}
+          {showOtpInput ? (
+            <div className="input-row">
+              <div className="col" style={{flex:1}}>
+                <div className="input-container">
+                  <input 
+                    id="registerEmail"
+                    type="email"
+                    value={email} 
+                    onChange={e=>setEmail(e.target.value)} 
+                    placeholder=" " 
+                    disabled={emailVerified}
+                    style={{opacity: emailVerified ? 0.7 : 1}}
+                    required
+                  />
+                  <label htmlFor="registerEmail">Email</label>
+                </div>
+                {!emailVerified ? (
+                  <button 
+                    type="button"
+                    onClick={sendOtp}
+                    disabled={!email || loadingOtp}
+                    className="verify-btn"
+                  >
+                    {loadingOtp ? (
+                      <>
+                        <span className="spinner"></span>
+                        Sending...
+                      </>
+                    ) : 'Resend OTP'}
+                  </button>
+                ) : (
+                  <span className="verification-status">✓ Verified</span>
+                )}
               </div>
-              {!emailVerified && (
-                <button 
-                  type="button"
-                  onClick={sendOtp}
-                  disabled={!email || loadingOtp}
-                  className="verify-btn"
-                >
-                  {loadingOtp ? (
-                    <>
-                      <span className="spinner"></span>
-                      Sending...
-                    </>
-                  ) : 'Verify'}
-                </button>
-              )}
-              {emailVerified && (
-                <span className="verification-status">✓ Verified</span>
-              )}
-            </div>
-            
-            {/* OTP Input */}
-            {showOtpInput && (
-              <div className="otp-verify-container">
-                <div className="input-container" style={{flex:1}}>
+              <div className="col" style={{flex:1}}>
+                <div className="input-container">
                   <input 
                     id="registerOtp"
                     value={otp} 
@@ -386,98 +451,390 @@ const Register = () => {
                   ) : 'Verify OTP'}
                 </button>
               </div>
-            )}
+            </div>
+          ) : (
+            /* Email only row (before OTP is requested) */
+            <div className="email-verify-container">
+              <div className="input-container" style={{flex:1}}>
+                <input 
+                  id="registerEmail"
+                  type="email"
+                  value={email} 
+                  onChange={e=>setEmail(e.target.value)} 
+                  placeholder=" " 
+                  disabled={emailVerified}
+                  style={{opacity: emailVerified ? 0.7 : 1}}
+                  required
+                />
+                <label htmlFor="registerEmail">Email</label>
+              </div>
+              {!emailVerified ? (
+                <button 
+                  type="button"
+                  onClick={sendOtp}
+                  disabled={!email || loadingOtp}
+                  className="verify-btn"
+                >
+                  {loadingOtp ? (
+                    <>
+                      <span className="spinner"></span>
+                      Sending...
+                    </>
+                  ) : 'Verify'}
+                </button>
+              ) : (
+                <span className="verification-status">✓ Verified</span>
+              )}
+            </div>
+          )}
             
-            <div className="input-container">
-              <input id="phone" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder=" " required />
-              <label htmlFor="phone">Phone</label>
-            </div>
-            <div className="input-container password-container">
-              <input 
-                id="password" 
-                type={showPassword ? 'text' : 'password'} 
-                value={password} 
-                onChange={e=>setPassword(e.target.value)} 
-                placeholder=" " 
-                required 
-                className={password ? 'has-value' : ''}
-              />
-              <label htmlFor="password">Password</label>
-              <button 
-                type="button" 
-                className="password-eye-toggle-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? eyeOffIcon : eyeIcon}
-              </button>
-            </div>
-            <div className="input-container password-container">
-              <input 
-                id="confirmPassword" 
-                type={showConfirmPassword ? 'text' : 'password'} 
-                value={confirm} 
-                onChange={e=>setConfirm(e.target.value)} 
-                placeholder=" " 
-                required 
-                className={confirm ? 'has-value' : ''}
-              />
-              <label htmlFor="confirmPassword">Confirm Password</label>
-              <button 
-                type="button" 
-                className="password-eye-toggle-btn"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                title={showConfirmPassword ? 'Hide password' : 'Show password'}
-              >
-                {showConfirmPassword ? eyeOffIcon : eyeIcon}
-              </button>
-            </div>
+          <div className="input-container">
+            <input id="phone" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder=" " required={!isOAuth2} />
+            <label htmlFor="phone">Phone</label>
+          </div>
+          {/* Stack password fields vertically */}
+          <div className="input-container password-container">
+            <input 
+              id="password" 
+              type={showPassword ? 'text' : 'password'} 
+              value={password} 
+              onChange={e=>setPassword(e.target.value)} 
+              placeholder=" " 
+              required={!isOAuth2} 
+              className={password ? 'has-value' : ''}
+            />
+            <label htmlFor="password">Password</label>
             <button 
-              type="submit"
-              className="auth-btn"
-              disabled={!(firstName && lastName && emailVerified && phone && password && confirm) || isLoading}
+              type="button" 
+              className="password-eye-toggle-btn"
+              onClick={() => setShowPassword(!showPassword)}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? eyeOffIcon : eyeIcon}
+            </button>
+          </div>
+          <div className="input-container password-container">
+            <input 
+              id="confirmPassword" 
+              type={showConfirmPassword ? 'text' : 'password'} 
+              value={confirm} 
+              onChange={e=>setConfirm(e.target.value)} 
+              placeholder=" " 
+              required={!isOAuth2} 
+              className={confirm ? 'has-value' : ''}
+            />
+            <label htmlFor="confirmPassword">Confirm Password</label>
+            <button 
+              type="button" 
+              className="password-eye-toggle-btn"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              title={showConfirmPassword ? 'Hide password' : 'Show password'}
+            >
+              {showConfirmPassword ? eyeOffIcon : eyeIcon}
+            </button>
+          </div>
+              <button 
+                type="submit"
+                className="auth-btn"
+                disabled={!(firstName && lastName && emailVerified && (isOAuth2 || (phone && password && confirm))) || isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <span className="spinner"></span>
+                    Creating Account...
+                  </>
+                ) : 'Sign Up'}
+              </button>
+              
+              {/* Error Message */}
+              {error && <div className="error-message">{error}</div>}
+              
+              {/* Social Login Buttons */}
+              <div className="social-login-section">
+                <p className="social-login-title">Or sign up with</p>
+                <div className="social-login-container">
+                  <button 
+                    type="button"
+                    className="social-btn google-btn"
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      const desiredRole = role || 'candidate';
+                      window.location.href = `${API_URL}/oauth2/authorize/google?redirect_uri=${encodeURIComponent(redirectUri)}&role=${encodeURIComponent(desiredRole)}&source=register`;
+                    }}
+                    title="Continue with Google"
+                  >
+                    {googleLogo}
+                    <span>Continue with Google</span>
+                  </button>
+                  <button 
+                    type="button"
+                    className="social-btn github-btn"
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      const desiredRole = role || 'candidate';
+                      window.location.href = `${API_URL}/oauth2/authorize/github?redirect_uri=${encodeURIComponent(redirectUri)}&role=${encodeURIComponent(desiredRole)}&source=register`;
+                    }}
+                    title="Continue with GitHub"
+                  >
+                    {githubLogo}
+                    <span>Continue with GitHub</span>
+                  </button>
+                  <button 
+                    type="button"
+                    className="social-btn apple-btn"
+                    title="Continue with Apple"
+                  >
+                    {appleLogo}
+                    <span>Continue with Apple</span>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Navigation Link to Login */}
+              <div className="auth-nav-link">
+                Already have an account? <span className="nav-link-btn" onClick={() => navigate('/')}>Sign In</span>
+              </div>
+            </form>
+        </div>
+      </div>
+
+      {/* Right: Illustration */}
+      <div className="right-box">
+        <div className="illustration-wrap">
+          <div className="right-oval"></div>
+          <img src="/Auth-logo.png" alt="Illustration" className="illustration-img" />
+        </div>
+        
+        {/* Mobile Form - Duplicate for mobile view */}
+        <div className="mobile-auth-card">
+          <div className="mobile-auth-header">
+            <div className="mobile-logo-section">
+              <h1>Register</h1>
+              <img src="/Auth-logo.png" alt="SmartHireX Logo" className="mobile-auth-logo" />
+            </div>
+          </div>
+          <div className="card-header">
+            <p className="card-subtitle">Join SmartHireX to find your dream job or hire top talent.</p>
+          </div>
+
+          <form onSubmit={showOtp ? handleOtpVerify : handleRegister} className="auth-form">
+            {/* Role Toggle */}
+            <div className="role-toggle">
+              <button
+                type="button"
+                className={`role-option ${role === 'candidate' ? 'active' : ''}`}
+                onClick={() => setRole('candidate')}
+              >
+                <span className="role-text">Candidate</span>
+              </button>
+              <button
+                type="button"
+                className={`role-option ${role === 'recruiter' ? 'active' : ''}`}
+                onClick={() => setRole('recruiter')}
+              >
+                <span className="role-text">Recruiter</span>
+              </button>
+            </div>
+
+            {!showOtp ? (
+              <>
+                <div className="input-row">
+                  <div className="input-container">
+                    <input 
+                      id="mobileFirstName" 
+                      type="text" 
+                      value={firstName} 
+                      onChange={e=>setFirstName(e.target.value)} 
+                      placeholder=" " 
+                      required 
+                      className={firstName ? 'has-value' : ''}
+                    />
+                    <label htmlFor="mobileFirstName">First Name</label>
+                  </div>
+                  <div className="input-container">
+                    <input 
+                      id="mobileLastName" 
+                      type="text" 
+                      value={lastName} 
+                      onChange={e=>setLastName(e.target.value)} 
+                      placeholder=" " 
+                      required 
+                      className={lastName ? 'has-value' : ''}
+                    />
+                    <label htmlFor="mobileLastName">Last Name</label>
+                  </div>
+                </div>
+
+                <div className="email-verify-row">
+                  <div className="email-input-wrapper">
+                    <div className="input-container">
+                      <input 
+                        id="mobileRegEmail" 
+                        type="email" 
+                        value={email} 
+                        onChange={e=>setEmail(e.target.value)} 
+                        placeholder=" " 
+                        required 
+                        className={email ? 'has-value' : ''}
+                      />
+                      <label htmlFor="mobileRegEmail">Email Address</label>
+                    </div>
+                  </div>
+                  <div className="verify-btn-wrapper">
+                    {!emailVerified && !showOtpInput && (
+                      <button 
+                        type="button" 
+                        className="verify-email-btn-side"
+                        onClick={sendOtp}
+                        disabled={loadingOtp || !email}
+                      >
+                        {loadingOtp ? 'Sending...' : 'Verify'}
+                      </button>
+                    )}
+                    {emailVerified && (
+                      <span className="verified-badge-side">✓ Verified</span>
+                    )}
+                  </div>
+                </div>
+
+                {showOtpInput && (
+                  <div className="input-container otp-verify-container">
+                    <input 
+                      id="mobileOtpInput" 
+                      type="text" 
+                      value={otp} 
+                      onChange={e=>setOtp(e.target.value)} 
+                      placeholder=" " 
+                      required 
+                      maxLength="6"
+                      className={otp ? 'has-value' : ''}
+                    />
+                    <label htmlFor="mobileOtpInput">Enter 6-digit OTP</label>
+                    <button 
+                      type="button" 
+                      className="verify-otp-btn"
+                      onClick={verifyOtp}
+                      disabled={loadingVerify || !otp}
+                    >
+                      {loadingVerify ? 'Verifying...' : 'Verify OTP'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="input-container password-container">
+                  <input 
+                    id="mobileRegPassword" 
+                    type={showPassword ? 'text' : 'password'} 
+                    value={password} 
+                    onChange={e=>setPassword(e.target.value)} 
+                    placeholder=" " 
+                    required 
+                    className={password ? 'has-value' : ''}
+                  />
+                  <label htmlFor="mobileRegPassword">Password</label>
+                  <button 
+                    type="button" 
+                    className="password-eye-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? eyeOffIcon : eyeIcon}
+                  </button>
+                </div>
+
+                <div className="input-container password-container">
+                  <input 
+                    id="mobileConfirmPassword" 
+                    type={showConfirmPassword ? 'text' : 'password'} 
+                    value={confirmPassword} 
+                    onChange={e=>setConfirmPassword(e.target.value)} 
+                    placeholder=" " 
+                    required 
+                    className={confirmPassword ? 'has-value' : ''}
+                  />
+                  <label htmlFor="mobileConfirmPassword">Confirm Password</label>
+                  <button 
+                    type="button" 
+                    className="password-eye-toggle-btn"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPassword ? eyeOffIcon : eyeIcon}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="input-container">
+                <input 
+                  id="mobileRegOtp" 
+                  type="text" 
+                  value={otp} 
+                  onChange={e=>setOtp(e.target.value)} 
+                  placeholder=" " 
+                  required 
+                  maxLength="6"
+                  className={otp ? 'has-value' : ''}
+                />
+                <label htmlFor="mobileRegOtp">Enter 6-digit OTP</label>
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              className={`auth-btn ${isLoading ? 'loading' : ''}`}
+              disabled={isLoading}
             >
               {isLoading ? (
                 <>
-                  <span className="spinner"></span>
-                  Creating Account...
+                  <div className="btn-spinner"></div>
+                  {showOtp ? 'Verifying OTP...' : 'Creating Account...'}
                 </>
-              ) : 'Sign Up'}
+              ) : (showOtp ? 'Verify OTP' : 'Sign Up')}
             </button>
             
-            {/* Error Message */}
             {error && <div className="error-message">{error}</div>}
             
-            {/* Social Login Buttons */}
-            <div className="social-login-section">
-              <p className="social-login-title">Or sign up with</p>
-              <div className="social-login-container">
-                <button 
-                  className="social-btn google-btn"
-                  onClick={() => {
-                    const redirectUri = `${window.location.origin}/oauth2/redirect`;
-                    window.location.href = `${API_URL}/oauth2/authorize/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-                  }}
-                  title="Continue with Google"
-                >
-                  {googleLogo}
-                  <span>Continue with Google</span>
-                </button>
-                <button 
-                  className="social-btn github-btn"
-                  onClick={() => {
-                    const redirectUri = `${window.location.origin}/oauth2/redirect`;
-                    window.location.href = `${API_URL}/oauth2/authorize/github?redirect_uri=${encodeURIComponent(redirectUri)}`;
-                  }}
-                  title="Continue with GitHub"
-                >
-                  {githubLogo}
-                  <span>Continue with GitHub</span>
-                </button>
-              </div>
-            </div>
+            {!showOtp && (
+              <>
+                <div className="divider">
+                  <span>- or -</span>
+                </div>
+                <div className="social-login-container">
+                  <button 
+                    type="button"
+                    className="social-btn google-btn"
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      const desiredRole = role || 'candidate';
+                      window.location.href = `${API_URL}/oauth2/authorize/google?redirect_uri=${encodeURIComponent(redirectUri)}&role=${encodeURIComponent(desiredRole)}&source=register`;
+                    }}
+                    title="Continue with Google"
+                  >
+                    {googleLogo}
+                  </button>
+                  <button 
+                    type="button"
+                    className="social-btn github-btn"
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      const desiredRole = role || 'candidate';
+                      window.location.href = `${API_URL}/oauth2/authorize/github?redirect_uri=${encodeURIComponent(redirectUri)}&role=${encodeURIComponent(desiredRole)}&source=register`;
+                    }}
+                    title="Continue with GitHub"
+                  >
+                    {githubLogo}
+                  </button>
+                  <button 
+                    type="button"
+                    className="social-btn apple-btn"
+                    title="Continue with Apple"
+                  >
+                    {appleLogo}
+                  </button>
+                </div>
+              </>
+            )}
             
-            {/* Navigation Link to Login */}
             <div className="auth-nav-link">
               Already have an account? <span className="nav-link-btn" onClick={() => navigate('/')}>Sign In</span>
             </div>

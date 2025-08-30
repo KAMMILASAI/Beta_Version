@@ -8,7 +8,14 @@ export default function EditProfile() {
     image: '',
     name: '',
     email: '',
+    profileType: 'student', // 'student' | 'postgraduate'
+    isFresher: false,
+    degree: '',
     college: '',
+    cgpa: '',
+    company: '',
+    lpa: '',
+    yearsExp: '',
     regNo: '',
     location: '',
     portfolio: '',
@@ -30,7 +37,19 @@ export default function EditProfile() {
         const res = await axios.get('http://localhost:8080/api/candidate/profile', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setForm(res.data);
+        setForm(prev => ({
+          ...prev,
+          ...res.data,
+          profileType: res.data.profileType || prev.profileType,
+          isFresher: !!res.data.isFresher,
+          degree: res.data.degree || '',
+          college: res.data.college || '',
+          cgpa: res.data.cgpa ?? '',
+          company: res.data.company || '',
+          lpa: res.data.lpa ?? '',
+          yearsExp: res.data.yearsExp ?? '',
+          skills: typeof res.data.skills === 'string' ? res.data.skills : Array.isArray(res.data.skills) ? res.data.skills.join(', ') : (res.data.skills || '')
+        }));
         setImagePreview(res.data.image || null);
         console.log('Profile loaded:', res.data);
       } catch (err) {
@@ -87,30 +106,22 @@ export default function EditProfile() {
   };
 
   return (
-    <div className="edit-profile-container" style={{ 
-      width: '100%', 
-      margin: 0, 
-      padding: 32, 
-      background: 'white',
-      minHeight: '100vh',
-      borderRadius: 0, 
-      boxShadow: 'none' 
-    }}>
+    <div className="edit-profile-container dashboard-container">
       <h2>Edit Profile</h2>
+      <div className="profile-subtitle">Update your profile once and use it to auto-apply to jobs.</div>
       {error && <div className="profile-message error">{error}</div>}
       {success && <div className="profile-message success">Profile updated!</div>}
       <form onSubmit={handleSubmit} encType="multipart/form-data">
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: 32 }}>
+        <div className="profile-avatar-wrap">
           <div
-            className="profile-avatar-container"
-            style={{ width: 160, height: 160, borderRadius: '50%', background: '#eee', display: 'block', cursor: 'pointer', overflow: 'hidden' }}
+            className="profile-avatar-container profile-avatar"
             onClick={handleImageClick}
             title="Click to upload image"
           >
             {imagePreview ? (
-              <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img className="profile-avatar-img" src={imagePreview} alt="Preview" />
             ) : (
-              <FiUser size={80} style={{ color: '#bbb', display: 'block', margin: '30px auto' }} />
+              <FiUser className="profile-avatar-icon" size={80} />
             )}
           </div>
           <input
@@ -131,10 +142,84 @@ export default function EditProfile() {
             <label>Email:</label>
             <input type="email" name="email" value={form.email || ''} onChange={handleChange} />
           </div>
-          <div className="profile-form-group">
-            <label>College:</label>
-            <input type="text" name="college" value={form.college || ''} onChange={handleChange} />
+          <div className="profile-form-group" style={{ gridColumn: '1 / -1' }}>
+            <hr style={{ border: 0, borderTop: '1px solid #26314f', margin: '8px 0 12px' }} />
+            <div style={{ fontWeight: 600, color: '#cbd5e1', marginBottom: 8 }}>Education / Experience</div>
           </div>
+          <div className="profile-form-group" style={{ gridColumn: '1 / -1', borderTop: '1px solid #26314f', paddingTop: 12, marginTop: 8 }}>
+            <label style={{ display: 'block', marginBottom: 6, color: '#cbd5e1' }}>Profile Type:</label>
+            <label style={{ marginRight: 16 }}>
+              <input type="radio" name="profileType" value="student" checked={form.profileType === 'student'} onChange={handleChange} /> Student
+            </label>
+            <label>
+              <input type="radio" name="profileType" value="postgraduate" checked={form.profileType === 'postgraduate'} onChange={handleChange} /> Post Graduate
+            </label>
+          </div>
+          {form.profileType === 'postgraduate' && (
+            <div className="profile-form-group" style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', marginBottom: 6, color: '#cbd5e1' }}>Are you a Fresher?</label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!!form.isFresher}
+                  onChange={(e) => setForm(f => ({ ...f, isFresher: e.target.checked }))}
+                />{' '}Yes, I'm a fresher
+              </label>
+            </div>
+          )}
+          {form.profileType === 'postgraduate' && form.isFresher && (
+            <>
+              <div className="profile-form-group">
+                <label>Graduation Degree:</label>
+                <select name="degree" value={form.degree || ''} onChange={handleChange}>
+                  <option value="">Select degree</option>
+                  <option value="BTech">BTech</option>
+                  <option value="BE">BE</option>
+                  <option value="MTech">MTech</option>
+                  <option value="ME">ME</option>
+                  <option value="BSc">BSc</option>
+                  <option value="MSc">MSc</option>
+                  <option value="BCA">BCA</option>
+                  <option value="MCA">MCA</option>
+                  <option value="MBA">MBA</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </>
+          )}
+          {(form.profileType === 'student' || (form.profileType === 'postgraduate' && form.isFresher)) && (
+            <>
+              <div className="profile-form-group">
+                <label>College:</label>
+                <input type="text" name="college" value={form.college || ''} onChange={handleChange} />
+              </div>
+              <div className="profile-form-group">
+                <label>CGPA:</label>
+                <input type="number" step="0.01" name="cgpa" value={form.cgpa || ''} onChange={handleChange} />
+              </div>
+            </>
+          )}
+          {form.profileType === 'postgraduate' && !form.isFresher && (
+            <>
+              <div className="profile-form-group">
+                <label>Company Name:</label>
+                <input type="text" name="company" value={form.company || ''} onChange={handleChange} />
+              </div>
+              <div className="profile-form-group">
+                <label>Current/Last CTC (LPA):</label>
+                <input type="number" step="0.1" name="lpa" value={form.lpa || ''} onChange={handleChange} />
+              </div>
+              <div className="profile-form-group">
+                <label>Years of Experience:</label>
+                <input type="number" step="0.1" name="yearsExp" value={form.yearsExp || ''} onChange={handleChange} />
+              </div>
+            </>
+          )}
+          <div className="profile-form-group" style={{ gridColumn: '1 / -1' }}>
+            <hr style={{ border: 0, borderTop: '1px solid #26314f', margin: '8px 0 12px' }} />
+            <div style={{ fontWeight: 600, color: '#cbd5e1', marginBottom: 8 }}>Contact & Links</div>
+          </div>
+          {/* Optional: keep reg no */}
           <div className="profile-form-group">
             <label>College Reg. No:</label>
             <input type="text" name="regNo" value={form.regNo || ''} onChange={handleChange} />
@@ -155,12 +240,12 @@ export default function EditProfile() {
             <label>LinkedIn Link:</label>
             <input type="url" name="linkedin" value={form.linkedin || ''} onChange={handleChange} />
           </div>
-          <div className="profile-form-group skills-section">
+          <div className="profile-form-group skills-section" style={{ gridColumn: '1 / -1' }}>
             <label>Skills (comma separated):</label>
             <input type="text" name="skills" value={form.skills || ''} onChange={handleChange} />
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
+        <div className="profile-actions">
           <button type="submit" className="profile-submit-btn">
             Update Profile
           </button>

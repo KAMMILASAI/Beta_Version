@@ -30,12 +30,12 @@ export default function Analysis() {
       const token = localStorage.getItem('token');
       
       // Fetch candidates
-      const candidatesRes = await axios.get('http://localhost:5000/api/admin/candidates', {
+      const candidatesRes = await axios.get('http://localhost:8080/api/admin/candidates', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       // Fetch recruiters
-      const recruitersRes = await axios.get('http://localhost:5000/api/admin/recruiters', {
+      const recruitersRes = await axios.get('http://localhost:8080/api/admin/recruiters', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -87,7 +87,7 @@ export default function Analysis() {
       const token = localStorage.getItem('token');
       const endpoint = userType === 'candidate' ? 'candidates' : 'recruiters';
       
-      await axios.delete(`http://localhost:5000/api/admin/${endpoint}/${userId}`, {
+      await axios.delete(`http://localhost:8080/api/admin/${endpoint}/${userId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

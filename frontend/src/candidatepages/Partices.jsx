@@ -1,20 +1,88 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FiClock, FiTrendingUp, FiAward, FiBook, FiCode, FiMic, FiArchive, FiX, FiCheck, FiAlertCircle } from 'react-icons/fi';
+import { FiClock, FiTrendingUp, FiAward, FiBook, FiCode, FiMic, FiArchive, FiX, FiCheck, FiAlertCircle, FiUpload } from 'react-icons/fi';
 import './Partices.css';
 
 const DIFFICULTY = ["Low", "Medium", "High"];
 const POPULAR_TECHS = [
-  'JavaScript', 'React', 'Node.js', 'Python', 'Java', 'CSS', 'HTML',
-  'TypeScript', 'Angular', 'Vue.js', 'Express.js', 'MongoDB', 'SQL',
-  'Git', 'Docker', 'AWS', 'REST API', 'GraphQL', 'Redux', 'Next.js'
+  // Web/Programming
+  'JavaScript', 'React', 'Node.js', 'Python', 'Java', 'C', 'C++', 'Go', 'TypeScript',
+  'HTML', 'CSS', 'Angular', 'Vue.js', 'Next.js', 'Express.js', 'MongoDB', 'SQL', 'PostgreSQL',
+  'Git', 'Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP', 'REST API', 'GraphQL', 'Redux',
+  
+  // Core CS subjects
+  'Data Structures', 'Algorithms', 'Operating Systems', 'DBMS', 'Computer Networks', 'OOP', 'Software Engineering', 'System Design', 'Discrete Mathematics',
+
+  // Core Engineering subjects
+  'Digital Electronics', 'Analog Electronics', 'Electrical Circuits', 'Electrical Machines',
+  'Signals and Systems', 'Control Systems', 'Power Systems',
+  'Thermodynamics', 'Strength of Materials', 'Manufacturing', 'Fluid Mechanics', 'Heat Transfer', 'Machine Design',
+  'Civil Structures', 'Geotechnical Engineering', 'Surveying', 'Transportation Engineering', 'Environmental Engineering'
 ];
 
+// Safe date-time formatting for backend timestamps (supports 'created_at')
+function formatDateTime(input) {
+  try {
+    if (!input) return '';
+    if (input instanceof Date && !isNaN(input)) return input.toLocaleString();
+    // If numeric epoch
+    if (typeof input === 'number') {
+      const d = new Date(input > 1e12 ? input : input * 1000);
+      return isNaN(d) ? '' : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+    }
+    let str = String(input).trim();
+    // Handle comma-separated components: YYYY,MM,DD,HH,mm,ss,ns/ms
+    if (/^\d{4},\d{1,2},\d{1,2}(,\d{1,2},\d{1,2}(,\d{1,2}(,\d{1,9})?)?)?$/.test(str)) {
+      const parts = str.split(',').map(n => parseInt(n, 10));
+      const [y, m, d, hh = 0, mm = 0, ss = 0, frac = 0] = parts;
+      // If last part looks like nanoseconds (>= 1e6), convert to ms
+      const ms = frac >= 1e6 ? Math.floor(frac / 1e6) : frac; // supports micro/nano
+      const dt = new Date(y, (m || 1) - 1, d || 1, hh, mm, ss, ms);
+      if (!isNaN(dt)) {
+        return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(dt);
+      }
+    }
+    // Replace space between date and time with 'T' if present
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(str)) {
+      str = str.replace(' ', 'T');
+    }
+    // Normalize fractional seconds to milliseconds but keep timezone suffix (Z or ±HH:MM)
+    const rx = /^(.*T\d{2}:\d{2}:\d{2})(\.(\d+))?(Z|[+-]\d{2}:?\d{2})?$/;
+    const m = str.match(rx);
+    if (m) {
+      const base = m[1];
+      const fraction = m[3] ? `.${m[3].slice(0, 3)}` : '';
+      let tz = m[4] || '';
+      // Ensure timezone has colon if missing (e.g., +0530 -> +05:30)
+      if (/^[+-]\d{4}$/.test(tz)) {
+        tz = tz.slice(0, 3) + ':' + tz.slice(3);
+      }
+      str = base + fraction + tz;
+    }
+    const d = new Date(str);
+    if (isNaN(d)) {
+      // Fallback: try only date part
+      const onlyDate = str.split('T')[0];
+      const d2 = new Date(onlyDate);
+      return isNaN(d2)
+        ? String(input)
+        : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d2);
+    }
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  } catch {
+    return String(input || '');
+  }
+}
+
 export default function Partices() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [practiceHistory, setPracticeHistory] = useState([]);
   const [historyStats, setHistoryStats] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [startTime, setStartTime] = useState(null);
   
   // MCQ States
@@ -25,26 +93,76 @@ export default function Partices() {
   const [mcqStarted, setMcqStarted] = useState(false);
   const [mcqAnswers, setMcqAnswers] = useState([]);
   const [mcqScore, setMcqScore] = useState(null);
+  // MCQ Timer
+  const [mcqTimerEnabled, setMcqTimerEnabled] = useState(false);
+  const [mcqTimerMinutes, setMcqTimerMinutes] = useState(10);
   
   // Coding States
   const [codingDialog, setCodingDialog] = useState(false);
-  const [codingInput, setCodingInput] = useState({ tech: '', difficulty: 'Medium' });
+  const [codingInput, setCodingInput] = useState({ tech: '', difficulty: 'Medium', num: 1 });
   const [codingLoading, setCodingLoading] = useState(false);
   const [codingQ, setCodingQ] = useState(null);
   const [codingAns, setCodingAns] = useState('');
   const [codingScore, setCodingScore] = useState(null);
+  // Coding Timer
+  const [codingTimerEnabled, setCodingTimerEnabled] = useState(false);
+  const [codingTimerMinutes, setCodingTimerMinutes] = useState(30);
+
+  // Interview States
+  const [interviewDialog, setInterviewDialog] = useState(false);
+  const [interviewLoading, setInterviewLoading] = useState(false);
+  const [interviewInput, setInterviewInput] = useState({
+    type: 'technology', // 'technology' | 'project'
+    tech: '',
+    projectSummary: '',
+    num: 5,
+    difficulty: 'Medium',
+    resumeFile: null,
+    resumeText: ''
+  });
 
   // Load practice history
   const loadHistory = async () => {
     try {
+      setHistoryLoading(true);
+      setHistoryError('');
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/candidate/practice/history', {
+      let currentUser = null;
+      try { currentUser = JSON.parse(localStorage.getItem('user') || 'null'); } catch {}
+      const res = await axios.get('http://localhost:8080/api/candidate/practice/history?limit=25', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setPracticeHistory(res.data.sessions);
-      setHistoryStats(res.data.stats);
+      const data = res?.data;
+      // Accept {sessions:[...]}, or array directly, or fallback key names
+      const sessions = Array.isArray(data)
+        ? data
+        : (data?.sessions || data?.items || []);
+      const stats = data?.stats || [];
+      const uid = currentUser?.id || currentUser?._id || currentUser?.userId || currentUser?.user?.id;
+      const filtered = (Array.isArray(sessions) ? sessions : []).filter(s => {
+        // Must be an object
+        if (!s || typeof s !== 'object' || Array.isArray(s)) return false;
+        // If server provides ownership, enforce it
+        const owner = s.candidateId ?? s.candidate_id ?? s.userId ?? s.user_id ?? s.ownerId;
+        if (uid && owner != null && String(owner) !== String(uid)) return false;
+        // Require at least one realistic session trait
+        const hasQuestions = Array.isArray(s.questions) && s.questions.length > 0;
+        const hasTechs = Array.isArray(s.technologies) && s.technologies.length > 0;
+        const hasCompleted = typeof s.completed === 'boolean';
+        const hasTotals = typeof s.totalQuestions === 'number' && s.totalQuestions >= 1;
+        const ts = s.created_at || s.createdAt || s.startedAt || s.timestamp;
+        const tsOk = !!formatDateTime(ts);
+        return hasQuestions || hasTechs || hasCompleted || hasTotals || tsOk;
+      });
+      setPracticeHistory(filtered);
+      setHistoryStats(Array.isArray(stats) ? stats : []);
     } catch (err) {
       console.error('Failed to load history:', err);
+      setHistoryError('Unable to load practice history.');
+      setPracticeHistory([]);
+      setHistoryStats([]);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -58,7 +176,7 @@ export default function Partices() {
   const savePracticeSession = async (sessionData) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5000/api/candidate/practice/save-session', sessionData, {
+      await axios.post('http://localhost:8080/api/candidate/practice/save-session', sessionData, {
         headers: { Authorization: `Bearer ${token}` }
       });
     } catch (err) {
@@ -81,7 +199,7 @@ export default function Partices() {
     
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:5000/api/candidate/practice/mcqs', {
+      const res = await axios.post('http://localhost:8080/api/candidate/practice/mcqs', {
         tech: mcqInput.tech,
         num: mcqInput.num,
         difficulty: mcqInput.difficulty
@@ -148,7 +266,7 @@ export default function Partices() {
     
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.post('http://localhost:5000/api/candidate/practice/coding', {
+      const res = await axios.post('http://localhost:8080/api/candidate/practice/coding', {
         tech: codingInput.tech,
         difficulty: codingInput.difficulty
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -202,60 +320,82 @@ export default function Partices() {
     });
   };
 
-  // Technology input helper
-  const TechInput = ({ value, onChange, placeholder }) => (
-    <div style={{ position: 'relative' }}>
-      <input 
-        placeholder={placeholder}
-        value={value} 
-        onChange={e => onChange(e.target.value)}
-        style={{
-          ...inputStyle,
-          paddingRight: '40px'
-        }}
-      />
-      <div style={{
-        position: 'absolute',
-        top: '100%',
-        left: 0,
-        right: 0,
-        background: '#fff',
-        border: '1px solid #e0e7ff',
-        borderTop: 'none',
-        borderRadius: '0 0 8px 8px',
-        maxHeight: '200px',
-        overflowY: 'auto',
-        zIndex: 1000,
-        display: value.length > 0 ? 'block' : 'none'
-      }}>
-        {POPULAR_TECHS
-          .filter(tech => tech.toLowerCase().includes(value.toLowerCase()) && !value.split(',').map(t => t.trim()).includes(tech))
-          .slice(0, 8)
-          .map(tech => (
-            <div
-              key={tech}
-              onClick={() => {
-                const currentTechs = value.split(',').map(t => t.trim()).filter(t => t.length > 0);
-                const newTechs = [...currentTechs, tech].join(', ');
-                onChange(newTechs);
-              }}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                borderBottom: '1px solid #f0f0f0',
-                fontSize: '14px',
-                ':hover': { background: '#f8fafc' }
-              }}
-              onMouseEnter={e => e.target.style.background = '#f8fafc'}
-              onMouseLeave={e => e.target.style.background = '#fff'}
-            >
-              {tech}
-            </div>
-          ))
-        }
+  // Technology tags input (chips + suggestions)
+  const TechTagsInput = ({ value, onChange, placeholder }) => {
+    const [input, setInput] = useState('');
+    const [tags, setTags] = useState(() => value.split(',').map(t => t.trim()).filter(Boolean));
+    const allTagsLower = tags.map(t => t.toLowerCase());
+
+    useEffect(() => {
+      const arr = value.split(',').map(t => t.trim()).filter(Boolean);
+      setTags(arr);
+    }, [value]);
+
+    const commitTags = (next) => {
+      setTags(next);
+      onChange(next.join(', '));
+    };
+
+    const addFromInput = () => {
+      const token = input.trim();
+      if (!token) return;
+      if (allTagsLower.includes(token.toLowerCase())) { setInput(''); return; }
+      const next = [...tags, token];
+      setInput('');
+      commitTags(next);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        addFromInput();
+      } else if (e.key === 'Backspace' && input.length === 0 && tags.length > 0) {
+        const next = tags.slice(0, -1);
+        commitTags(next);
+      }
+    };
+
+    const filtered = input
+      ? POPULAR_TECHS.filter(t => t.toLowerCase().includes(input.toLowerCase()) && !allTagsLower.includes(t.toLowerCase())).slice(0, 8)
+      : [];
+
+    return (
+      <div className="tags-input-container">
+        <div className="tags-input">
+          {tags.map(t => (
+            <span key={t} className="tag-chip">
+              {t}
+              <button className="tag-remove" onClick={() => commitTags(tags.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
+            </span>
+          ))}
+          <input
+            className="tags-input-field"
+            placeholder={tags.length === 0 ? placeholder : 'Add more...'}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            onBlur={() => input.trim() && addFromInput()}
+          />
+        </div>
+        {filtered.length > 0 && (
+          <div className="tech-suggestions">
+            {filtered.map(opt => (
+              <div key={opt} className="tech-suggestion" onMouseDown={() => {
+                // onMouseDown so blur doesn't fire first
+                if (!allTagsLower.includes(opt.toLowerCase())) {
+                  const next = [...tags, opt];
+                  commitTags(next);
+                  setInput('');
+                }
+              }}>
+                {opt}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="practice-container">
@@ -279,8 +419,8 @@ export default function Partices() {
               Practice History & Analytics
             </h3>
           
-            {/* Stats Cards */}
-            {historyStats.length > 0 && (
+            {/* Stats Cards (shown only if backend provides stats) */}
+            {Array.isArray(historyStats) && historyStats.length > 0 && (
               <div className="stats-grid">
                 {historyStats.map(stat => (
                   <div key={stat._id} className="stat-card">
@@ -300,43 +440,62 @@ export default function Partices() {
           
           {/* Recent Sessions */}
           <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            {practiceHistory.length > 0 ? (
+            {historyLoading ? (
+              <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px 0' }}>
+                <div className="loading-spinner" style={{ margin: '0 auto 12px' }}></div>
+                Loading history...
+              </div>
+            ) : historyError ? (
+              <div style={{ textAlign: 'center', color: '#f87171', padding: '24px', background: '#1a2236', borderRadius: 12, border: '1px solid #2b3a55' }}>
+                <div style={{ marginBottom: 10 }}>⚠️ {historyError}</div>
+                <button className="btn" onClick={loadHistory}>Retry</button>
+              </div>
+            ) : Array.isArray(practiceHistory) && practiceHistory.length > 0 ? (
               practiceHistory.map(session => (
-                <div key={session._id} style={{
-                  background: '#fff',
-                  borderRadius: 8,
+                <div key={session.id || session._id} style={{
+                  background: '#0b1220',
+                  borderRadius: 12,
                   padding: 16,
                   marginBottom: 12,
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+                  border: '1px solid #1f2937'
                 }}>
                   <div>
-                    <div style={{ fontWeight: '600', color: '#1f2937', marginBottom: 4 }}>
-                      {session.type.toUpperCase()} - {session.technologies.join(', ')}
+                    <div style={{ fontWeight: '600', color: '#e5e7eb', marginBottom: 4 }}>
+                      {String(session.type || 'session').toUpperCase()}
+                      {Array.isArray(session.technologies) && session.technologies.length > 0
+                        ? ` - ${session.technologies.join(', ')}`
+                        : ''}
                     </div>
-                    <div style={{ fontSize: '14px', color: '#6b7280' }}>
-                      {session.difficulty} • {new Date(session.createdAt).toLocaleDateString()}
+                    <div style={{ fontSize: '14px', color: '#9ca3af' }}>
+                      {(session.difficulty || '').toString()}
+                      {(() => {
+                        const ts = session.created_at || session.createdAt || session.startedAt || session.timestamp;
+                        const formatted = formatDateTime(ts);
+                        return formatted ? ` • ${formatted}` : '';
+                      })()}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ 
                       fontSize: '18px', 
                       fontWeight: '700', 
-                      color: session.percentage >= 80 ? '#10b981' : session.percentage >= 60 ? '#3b82f6' : '#ef4444'
+                      color: (session.percentage || 0) >= 80 ? '#10b981' : (session.percentage || 0) >= 60 ? '#3b82f6' : '#ef4444'
                     }}>
-                      {session.percentage}%
+                      {(session.percentage ?? Math.round(((session.score || 0) * 100) / Math.max(1, (session.totalQuestions || 0))))}%
                     </div>
                     <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-                      {session.score}/{session.totalQuestions}
+                      {(session.score ?? 0)}/{(session.totalQuestions ?? 0)}
                     </div>
                   </div>
                 </div>
               ))
             ) : (
-              <div style={{ textAlign: 'center', color: '#6b7280', padding: '40px 0' }}>
-                <FiBook size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+              <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px 0' }}>
+                <FiBook size={48} style={{ margin: '0 auto 16px', opacity: 0.7 }} />
                 <div>No practice history yet. Start practicing to see your progress!</div>
               </div>
             )}
@@ -375,7 +534,7 @@ export default function Partices() {
             
             <div 
               className="practice-card interview"
-              onClick={() => setMode('interview')}
+              onClick={() => { setMode('interview'); setInterviewDialog(true); }}
             >
               <div className="practice-card-icon">
                 <FiMic size={48} />
@@ -394,21 +553,18 @@ export default function Partices() {
             <div className="modal-dialog">
               <div className="modal-header">
                 <h3 className="modal-title">Generate MCQ Test</h3>
-                <button className="close-button" onClick={() => setMcqDialog(false)}>
-                  <FiX size={20} />
+                <button className="close-button" onClick={() => setMcqDialog(false)} aria-label="Close">
+                  <span style={{ fontSize: 20, fontWeight: 800 }}>x</span>
                 </button>
               </div>
               
               <div className="form-group">
-                <label className="form-label">Technologies (comma-separated)</label>
-                <TechInput 
-                  placeholder="e.g. JavaScript, React, Node.js" 
-                  value={mcqInput.tech} 
+                <label className="form-label">Technologies</label>
+                <TechTagsInput 
+                  placeholder="Add a technology and press Enter"
+                  value={mcqInput.tech}
                   onChange={tech => setMcqInput({ ...mcqInput, tech })}
                 />
-                <div style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
-                  💡 You can enter multiple technologies separated by commas
-                </div>
               </div>
               
               <div className="form-grid">
@@ -418,9 +574,13 @@ export default function Partices() {
                     className="form-input"
                     type="number" 
                     min={1} 
-                    max={20} 
+                    max={100}
+                    step={1}
                     value={mcqInput.num} 
-                    onChange={e => setMcqInput({ ...mcqInput, num: parseInt(e.target.value) || 5 })}
+                    onChange={e => setMcqInput({ 
+                      ...mcqInput, 
+                      num: Math.max(1, Math.min(100, parseInt(e.target.value) || 5)) 
+                    })}
                   />
                 </div>
                 <div className="form-group">
@@ -434,10 +594,45 @@ export default function Partices() {
                   </select>
                 </div>
               </div>
+
+              {/* Timer Controls */}
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Timer</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                    <label className="switch" aria-label="Toggle timer">
+                      <input
+                        type="checkbox"
+                        checked={mcqTimerEnabled}
+                        onChange={(e) => setMcqTimerEnabled(e.target.checked)}
+                      />
+                      <span className="slider"></span>
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#9ca3af' }}>
+                      <FiClock size={14} />
+                      <span style={{ fontSize: 13 }}>{mcqTimerEnabled ? 'Timer will auto-submit' : 'No time limit'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Time Limit</label>
+                  <select
+                    className="form-input"
+                    value={mcqTimerMinutes}
+                    onChange={e => setMcqTimerMinutes(parseInt(e.target.value) || 10)}
+                    disabled={!mcqTimerEnabled}
+                  >
+                    {[5,10,15,20,30].map(m => (
+                      <option key={m} value={m}>{m} minutes</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               
               <div className="btn-group">
                 <button 
                   className={`btn btn-full ${mcqLoading ? 'loading' : ''}`}
+                  style={{ padding: '14px 24px', fontSize: 16, fontWeight: 700 }}
                   onClick={handleGenerateMcqs} 
                   disabled={mcqLoading || !mcqInput.tech.trim()}
                 >
@@ -453,12 +648,6 @@ export default function Partices() {
                     </>
                   )}
                 </button>
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => setMcqDialog(false)}
-                >
-                  Cancel
-                </button>
               </div>
           </div>
         </div>
@@ -468,7 +657,29 @@ export default function Partices() {
         <div>
           {mcqLoading && <div>Loading MCQs...</div>}
           {!mcqLoading && mcqs.length > 0 && !mcqStarted && (
-            <button style={btnStyle} onClick={() => setMcqStarted(true)}>Start Test</button>
+            <button
+              style={btnStyle}
+              onClick={() => {
+                // If you still want to keep inline mode for fallback, keep setMcqStarted(true)
+                // setMcqStarted(true);
+                const mapped = mcqs.map((q, idx) => ({
+                  id: idx + 1,
+                  question: q.q,
+                  options: q.options,
+                  correctAnswer: q.answer,
+                  technology: q.technology
+                }));
+                navigate('/candidate/mcqs', {
+                  state: {
+                    questions: mapped,
+                    timerEnabled: mcqTimerEnabled,
+                    timerMinutes: mcqTimerEnabled ? mcqTimerMinutes : null
+                  }
+                });
+              }}
+            >
+              Start Test
+            </button>
           )}
           {!mcqLoading && mcqStarted && !mcqScore && (
             <MCQStepper
@@ -476,6 +687,8 @@ export default function Partices() {
               mcqAnswers={mcqAnswers}
               setMcqAnswers={setMcqAnswers}
               onSubmit={handleSubmitMcqs}
+              timerEnabled={mcqTimerEnabled}
+              timerMinutes={mcqTimerEnabled ? mcqTimerMinutes : null}
             />
           )}
           {mcqScore && (
@@ -486,54 +699,92 @@ export default function Partices() {
 
       {/* Coding Dialog */}
       {codingDialog && (
-        <div style={overlayStyle}>
-          <div style={enhancedDialogStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h3 style={{ margin: 0, color: '#1f2937', fontSize: '20px', fontWeight: '700' }}>Generate Coding Challenge</h3>
-              <button onClick={() => setCodingDialog(false)} style={closeButtonStyle}>
-                <FiX size={20} />
+        <div className="modal-overlay">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h3 className="modal-title">Generate Coding Challenge</h3>
+              <button className="close-button" onClick={() => setCodingDialog(false)} aria-label="Close">
+                <span style={{ fontSize: 20, fontWeight: 800 }}>x</span>
               </button>
             </div>
             
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Technologies (comma-separated)</label>
-              <TechInput 
-                placeholder="e.g. JavaScript, Python, Java" 
-                value={codingInput.tech} 
+            <div className="form-group">
+              <label className="form-label">Technologies</label>
+              <TechTagsInput 
+                placeholder="Add a technology and press Enter"
+                value={codingInput.tech}
                 onChange={tech => setCodingInput({ ...codingInput, tech })}
               />
-              <div style={{ fontSize: '12px', color: '#6b7280', marginTop: 4 }}>
-                🚀 Enter technologies for real-world coding challenges
-              </div>
             </div>
             
-            <div style={{ marginBottom: 24 }}>
-              <label style={labelStyle}>Difficulty Level</label>
+            <div className="form-group">
+              <label className="form-label">Difficulty Level</label>
               <select 
+                className="form-input"
                 value={codingInput.difficulty} 
                 onChange={e => setCodingInput({ ...codingInput, difficulty: e.target.value })}
-                style={inputStyle}
               >
                 {DIFFICULTY.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
+
+            <div className="form-group">
+              <label className="form-label">Number of Questions</label>
+              <select
+                className="form-input"
+                value={codingInput.num}
+                onChange={e => setCodingInput({ ...codingInput, num: Math.max(1, Math.min(5, parseInt(e.target.value) || 1)) })}
+              >
+                {[1,2,3,4,5].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
             
-            <div style={{ display: 'flex', gap: 12 }}>
+            {/* Timer Controls (match MCQ dialog) */}
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Timer</label>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                  <label className="switch" aria-label="Toggle timer">
+                    <input
+                      type="checkbox"
+                      checked={codingTimerEnabled}
+                      onChange={(e) => setCodingTimerEnabled(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#9ca3af' }}>
+                    <FiClock size={14} />
+                    <span style={{ fontSize: 13 }}>{codingTimerEnabled ? 'Timer will auto-submit' : 'No time limit'}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Time Limit</label>
+                <select
+                  className="form-input"
+                  value={codingTimerMinutes}
+                  onChange={e => setCodingTimerMinutes(parseInt(e.target.value) || 30)}
+                  disabled={!codingTimerEnabled}
+                >
+                  {[5,10,15,20,30,45,60].map(m => (
+                    <option key={m} value={m}>{m} minutes</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="btn-group">
               <button 
-                onClick={handleGenerateCoding} 
-                style={{
-                  ...btnStyle,
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }} 
+                className={`btn btn-full ${codingLoading ? 'loading' : ''}`}
+                style={{ padding: '14px 28px', fontSize: 16, fontWeight: 700 }}
+                onClick={handleGenerateCoding}
                 disabled={codingLoading || !codingInput.tech.trim()}
               >
                 {codingLoading ? (
                   <>
-                    <div style={spinnerStyle}></div>
+                    <div className="loading-spinner"></div>
                     Generating...
                   </>
                 ) : (
@@ -543,24 +794,13 @@ export default function Partices() {
                   </>
                 )}
               </button>
-              <button 
-                onClick={() => setCodingDialog(false)} 
-                style={{
-                  ...btnStyle, 
-                  background: '#6b7280',
-                  flex: '0 0 auto',
-                  padding: '12px 20px'
-                }}
-              >
-                Cancel
-              </button>
             </div>
           </div>
         </div>
       )}
       {/* Coding Loading/Start/Test */}
       {mode === 'coding' && !codingDialog && (
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        <div style={{ width: '100%' }}>
           {codingLoading && (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <div style={spinnerStyle}></div>
@@ -569,142 +809,48 @@ export default function Partices() {
           )}
           
           {!codingLoading && codingQ && (
-            <div style={{
-              background: '#fff',
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              border: '1px solid #e0e7ff'
-            }}>
-              <div style={{ marginBottom: 24 }}>
-                <h3 style={{ margin: '0 0 12px 0', color: '#1f2937', fontSize: '24px', fontWeight: '700' }}>
-                  {codingQ.title}
-                </h3>
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%)',
-                  borderRadius: 8,
-                  padding: 16,
-                  marginBottom: 16
-                }}>
-                  <div style={{ color: '#374151', lineHeight: '1.6', marginBottom: 12 }}>
-                    {codingQ.description}
-                  </div>
-                  
-                  {codingQ.examples && codingQ.examples.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontWeight: '600', color: '#1f2937', marginBottom: 8 }}>Examples:</div>
-                      {codingQ.examples.map((example, i) => (
-                        <div key={i} style={{
-                          background: '#fff',
-                          borderRadius: 6,
-                          padding: 12,
-                          marginBottom: 8,
-                          fontFamily: 'monospace',
-                          fontSize: '14px'
-                        }}>
-                          <div><strong>Input:</strong> {example.input}</div>
-                          <div><strong>Output:</strong> {example.output}</div>
-                          {example.explanation && <div style={{ color: '#6b7280', marginTop: 4 }}><em>{example.explanation}</em></div>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {codingQ.constraints && codingQ.constraints.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontWeight: '600', color: '#1f2937', marginBottom: 8 }}>Constraints:</div>
-                      <ul style={{ margin: 0, paddingLeft: 20, color: '#374151' }}>
-                        {codingQ.constraints.map((constraint, i) => (
-                          <li key={i} style={{ marginBottom: 4 }}>{constraint}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {codingQ.timeComplexity && (
-                    <div style={{ display: 'flex', gap: 16, fontSize: '14px', color: '#6b7280' }}>
-                      <span><strong>Time:</strong> {codingQ.timeComplexity}</span>
-                      <span><strong>Space:</strong> {codingQ.spaceComplexity}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <form onSubmit={e => { e.preventDefault(); handleSubmitCoding(); }}>
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ ...labelStyle, marginBottom: 8 }}>Your Solution:</label>
-                  <textarea 
-                    rows={12} 
-                    style={{
-                      width: '100%',
-                      fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                      fontSize: 14,
-                      borderRadius: 8,
-                      border: '2px solid #e0e7ff',
-                      padding: 16,
-                      resize: 'vertical',
-                      outline: 'none',
-                      transition: 'border-color 0.2s',
-                      ':focus': { borderColor: '#6366f1' }
-                    }}
-                    value={codingAns} 
-                    onChange={e => setCodingAns(e.target.value)} 
-                    placeholder={codingQ.starter || 'Write your solution here...'}
-                    onFocus={e => e.target.style.borderColor = '#6366f1'}
-                    onBlur={e => e.target.style.borderColor = '#e0e7ff'}
-                  />
-                </div>
-                
-                {codingQ.hints && codingQ.hints.length > 0 && (
-                  <div style={{
-                    background: '#fef3c7',
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 20,
-                    border: '1px solid #fbbf24'
-                  }}>
-                    <div style={{ fontWeight: '600', color: '#92400e', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FiAlertCircle size={16} />
-                      Hints:
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: 20, color: '#92400e' }}>
-                      {codingQ.hints.map((hint, i) => (
-                        <li key={i} style={{ marginBottom: 4 }}>{hint}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                
-                <button 
-                  type="submit" 
-                  style={{
-                    ...btnStyle,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    margin: '0 auto'
-                  }}
-                  disabled={!codingAns.trim()}
-                >
-                  <FiCheck size={16} />
-                  Submit Solution
-                </button>
-              </form>
-            </div>
+            <button
+              style={btnStyle}
+              onClick={() => {
+                const count = Math.max(1, Math.min(5, parseInt(codingInput.num) || 1));
+                const base = {
+                  title: codingQ.title,
+                  difficulty: codingQ.difficulty || codingInput.difficulty,
+                  description: codingQ.description || '',
+                  examples: Array.isArray(codingQ.examples) ? codingQ.examples : [],
+                  constraints: Array.isArray(codingQ.constraints) ? codingQ.constraints : [],
+                  starterCode: { javascript: codingQ.starter || '' },
+                  technology: codingQ.technology || (codingInput.tech || 'General')
+                };
+                const mapped = Array.from({ length: count }).map((_, idx) => ({
+                  id: idx + 1,
+                  ...base
+                }));
+                navigate('/candidate/coding', {
+                  state: {
+                    problems: mapped,
+                    timerEnabled: codingTimerEnabled,
+                    timerMinutes: codingTimerEnabled ? codingTimerMinutes : null
+                  }
+                });
+              }}
+            >
+              Start Test
+            </button>
           )}
           
           {codingScore && (
             <div style={{
               marginTop: 24,
-              background: 'linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%)',
+              background: 'linear-gradient(135deg, #0f172a 0%, #111827 100%)',
               borderRadius: 16,
               padding: 24,
               textAlign: 'center',
-              border: '1px solid #e0e7ff'
+              border: '1px solid #1f2937'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
-                <FiAward size={24} style={{ color: '#6366f1' }} />
-                <h3 style={{ margin: 0, color: '#1f2937' }}>Solution Analysis</h3>
+                <FiAward size={24} style={{ color: '#667eea' }} />
+                <h3 style={{ margin: 0, color: '#e5e7eb' }}>Solution Analysis</h3>
               </div>
               <div style={{ 
                 fontSize: '32px', 
@@ -714,11 +860,11 @@ export default function Partices() {
               }}>
                 {codingScore.score}/100
               </div>
-              <div style={{ color: '#374151', fontWeight: '600', marginBottom: 12 }}>
+              <div style={{ color: '#e5e7eb', fontWeight: '600', marginBottom: 12 }}>
                 {codingScore.feedback}
               </div>
               {codingScore.timeSpent && (
-                <div style={{ fontSize: '14px', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                <div style={{ fontSize: '14px', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                   <FiClock size={14} />
                   Time spent: {codingScore.timeSpent} minutes
                 </div>
@@ -728,10 +874,130 @@ export default function Partices() {
         </div>
       )}
 
-      {/* Interview Option */}
-      {mode === 'interview' && (
-        <div style={{ marginTop: 32, background: '#f8fafc', borderRadius: 12, padding: 32, textAlign: 'center', fontSize: 22, color: '#6366f1', fontWeight: 700 }}>
-          Interview Practice - Coming Soon...
+      {/* Interview Dialog */}
+      {interviewDialog && (
+        <div className="modal-overlay">
+          <div className="modal-dialog">
+            <div className="modal-header">
+              <h3 className="modal-title">Setup Mock Interview</h3>
+              <button className="close-button" onClick={() => setInterviewDialog(false)} aria-label="Close">
+                <span style={{ fontSize: 20, fontWeight: 800 }}>x</span>
+              </button>
+            </div>
+
+            {/* Type Selector */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button
+                className={`btn ${interviewInput.type === 'technology' ? 'btn-primary' : ''}`}
+                onClick={() => setInterviewInput({ ...interviewInput, type: 'technology' })}
+              >Technology-based</button>
+              <button
+                className={`btn ${interviewInput.type === 'project' ? 'btn-primary' : ''}`}
+                onClick={() => setInterviewInput({ ...interviewInput, type: 'project' })}
+              >Project/Resume-based</button>
+            </div>
+
+            {interviewInput.type === 'technology' ? (
+              <div className="form-group">
+                <label className="form-label">Technologies</label>
+                <TechTagsInput
+                  placeholder="Add a technology and press Enter"
+                  value={interviewInput.tech}
+                  onChange={tech => setInterviewInput({ ...interviewInput, tech })}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Project Summary / Focus Areas</label>
+                  <textarea
+                    className="form-input"
+                    rows={4}
+                    placeholder="Describe your project, role, and key tech stacks..."
+                    value={interviewInput.projectSummary}
+                    onChange={e => setInterviewInput({ ...interviewInput, projectSummary: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Upload Resume (optional)</label>
+                  <label className="btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <FiUpload />
+                    Choose File
+                    <input
+                      type="file"
+                      accept=".txt"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const text = await file.text().catch(() => '');
+                        setInterviewInput({ ...interviewInput, resumeFile: file, resumeText: text });
+                      }}
+                    />
+                  </label>
+                  {interviewInput.resumeFile && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#9ca3af' }}>Selected: {interviewInput.resumeFile.name}</div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Number of Questions</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min={3}
+                  max={20}
+                  value={interviewInput.num}
+                  onChange={e => setInterviewInput({ ...interviewInput, num: Math.max(3, Math.min(20, parseInt(e.target.value) || 5)) })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Difficulty</label>
+                <select
+                  className="form-input"
+                  value={interviewInput.difficulty}
+                  onChange={e => setInterviewInput({ ...interviewInput, difficulty: e.target.value })}
+                >
+                  {DIFFICULTY.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="btn-group">
+              <button
+                className={`btn btn-full ${interviewLoading ? 'loading' : ''}`}
+                style={{ padding: '14px 24px', fontSize: 16, fontWeight: 700 }}
+                onClick={() => {
+                  if (interviewInput.type === 'technology' && !interviewInput.tech.trim()) {
+                    alert('Please enter at least one technology');
+                    return;
+                  }
+                  setInterviewDialog(false);
+                  navigate('/candidate/interview', {
+                    state: {
+                      interview: {
+                        type: interviewInput.type,
+                        tech: interviewInput.tech,
+                        projectSummary: interviewInput.projectSummary,
+                        num: interviewInput.num,
+                        difficulty: interviewInput.difficulty,
+                        resumeText: interviewInput.resumeText || ''
+                      }
+                    }
+                  });
+                }}
+                disabled={interviewLoading}
+              >
+                <>
+                  <FiMic size={16} />
+                  Start Voice Interview
+                </>
+              </button>
+            </div>
+          </div>
         </div>
       )}
       </div>
@@ -739,40 +1005,62 @@ export default function Partices() {
   );
 }
 
-function MCQStepper({ mcqs, mcqAnswers, setMcqAnswers, onSubmit }) {
+function MCQStepper({ mcqs, mcqAnswers, setMcqAnswers, onSubmit, timerEnabled, timerMinutes }) {
   const [current, setCurrent] = useState(0);
+  const [remaining, setRemaining] = useState(timerEnabled && timerMinutes ? timerMinutes * 60 : null);
+
+  // Start/handle countdown
+  useEffect(() => {
+    if (!timerEnabled || !timerMinutes) return;
+    // reset remaining when minutes change
+    setRemaining(timerMinutes * 60);
+    let id = setInterval(() => {
+      setRemaining(prev => {
+        if (prev === null) return prev;
+        if (prev <= 1) {
+          clearInterval(id);
+          // Auto-submit on time up
+          try { onSubmit(); } catch (e) { /* noop */ }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [timerEnabled, timerMinutes, onSubmit]);
+
+  const formatTime = (s) => {
+    if (s === null || s === undefined) return '';
+    const mm = Math.floor(s / 60).toString().padStart(2, '0');
+    const ss = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${mm}:${ss}`;
+  };
+
   const q = mcqs[current];
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto' }}>
-      <div style={{
-        marginBottom: 28,
-        background: '#fff',
-        borderRadius: 12,
-        boxShadow: '0 2px 12px #6366f133',
-        padding: 24,
-        border: '1.5px solid #e0e7ff',
-        textAlign: 'left',
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: '#23233a' }}>{current + 1}. {q.q}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className="mcq-container">
+      {/* Header with timer and progress */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ color: '#9ca3af', fontSize: 14 }}>Question {current + 1} of {mcqs.length}</div>
+        {timerEnabled && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111827', border: '1px solid #1f2937', padding: '6px 10px', borderRadius: 999, color: remaining !== null && remaining <= 30 ? '#f59e0b' : '#e5e7eb' }}>
+            <FiClock size={14} />
+            <span style={{ fontWeight: 700 }}>{formatTime(remaining ?? 0)}</span>
+          </div>
+        )}
+      </div>
+      <div className="mcq-question">
+        <div className="mcq-question-text">{current + 1}. {q.q}</div>
+        <div className="mcq-options">
           {q.options.map((opt, j) => (
-            <label key={j} style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: '#f8fafc',
-              borderRadius: 8,
-              padding: '10px 16px',
-              border: '1.5px solid #e0e7ff',
-              cursor: 'pointer',
-              fontSize: 16,
-              color: '#23233a',
-              fontWeight: 500,
-              marginBottom: 0,
-              textAlign: 'left',
-              gap: 16,
-              transition: 'background 0.18s, border 0.18s',
-            }}>
-              <input type="radio" name={`mcq${current}`} value={j} checked={mcqAnswers[current] === j} onChange={() => setMcqAnswers(a => { const b = [...a]; b[current] = j; return b; })} style={{ marginRight: 10, accentColor: '#6366f1', width: 18, height: 18 }} />
+            <label key={j} className={`mcq-option ${mcqAnswers[current] === j ? 'selected' : ''}`}>
+              <input 
+                type="radio" 
+                name={`mcq${current}`} 
+                value={j} 
+                checked={mcqAnswers[current] === j} 
+                onChange={() => setMcqAnswers(a => { const b = [...a]; b[current] = j; return b; })} 
+              />
               <span style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -787,25 +1075,25 @@ function MCQStepper({ mcqs, mcqAnswers, setMcqAnswers, onSubmit }) {
                 marginRight: 8,
               }}>{String.fromCharCode(65 + j)}</span>
               <span style={{ verticalAlign: 'middle', fontWeight: 500 }}>{
-                typeof opt === 'string' ? opt.replace(/^([A-Da-d][\.\:\)\-]?\s*)/, '') : opt
+                typeof opt === 'string' ? opt.replace(/^([A-Da-d][\.:\)\-]?\s*)/, '') : opt
               }</span>
             </label>
           ))}
         </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 24 }}>
+      <div className="mcq-navigation">
         <button
-          style={{ ...btnStyle, background: '#eee', color: '#23233a' }}
+          className="btn btn-secondary"
           onClick={() => setCurrent(c => Math.max(0, c - 1))}
           disabled={current === 0}
         >Previous</button>
         {current < mcqs.length - 1 ? (
           <button
-            style={btnStyle}
+            className="btn"
             onClick={() => setCurrent(c => Math.min(mcqs.length - 1, c + 1))}
           >Next</button>
         ) : (
-          <button style={btnStyle} onClick={onSubmit}>Submit</button>
+          <button className="btn" onClick={onSubmit}>Submit</button>
         )}
       </div>
     </div>

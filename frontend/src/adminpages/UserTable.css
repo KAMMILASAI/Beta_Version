@@ -4,10 +4,10 @@
 }
 
 .user-list-card {
-  background: white;
+  background: #0f1629;
   border-radius: 16px;
   padding: 1.5rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 .user-list-header {
@@ -16,19 +16,19 @@
   align-items: center;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #1f2937;
 }
 
 .user-list-header h3 {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #1E293B;
+  color: #e2e8f0;
   margin: 0;
 }
 
 .user-count {
   font-size: 0.9rem;
-  color: #64748B;
+  color: #a0aec0;
   margin: 0;
 }
 
@@ -42,25 +42,26 @@
 }
 
 .user-table th {
-  background: #f8f9fa;
+  background: #111827;
   padding: 0.75rem 1rem;
   text-align: left;
   font-weight: 600;
-  color: #374151;
+  color: #e5e7eb;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid #1f2937;
 }
 
 .user-table td {
   padding: 1rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #1f2937;
   vertical-align: middle;
+  color: #e2e8f0;
 }
 
 .user-table tr:hover {
-  background: #f8f9fa;
+  background: #111827;
 }
 
 .user-info {
@@ -84,11 +85,11 @@
 
 .user-name {
   font-weight: 500;
-  color: #1E293B;
+  color: #e2e8f0;
 }
 
 .user-email {
-  color: #64748B;
+  color: #a0aec0;
   font-size: 0.9rem;
 }
 
@@ -104,17 +105,17 @@
 }
 
 .role-badge.candidate {
-  background: #dbeafe;
-  color: #1e40af;
+  background: rgba(59,130,246,0.2);
+  color: #93c5fd;
 }
 
 .role-badge.recruiter {
-  background: #fce7f3;
-  color: #be185d;
+  background: rgba(236,72,153,0.2);
+  color: #f9a8d4;
 }
 
 .join-date {
-  color: #64748B;
+  color: #a0aec0;
   font-size: 0.9rem;
 }
 
@@ -126,18 +127,18 @@
 }
 
 .status-badge.active {
-  background: #dcfce7;
-  color: #166534;
+  background: rgba(34,197,94,0.2);
+  color: #86efac;
 }
 
 .status-badge.pending {
-  background: #fef3c7;
-  color: #92400e;
+  background: rgba(250,204,21,0.15);
+  color: #fde68a;
 }
 
 .no-users {
   text-align: center;
-  color: #64748B;
+  color: #a0aec0;
   font-style: italic;
   padding: 2rem;
 }

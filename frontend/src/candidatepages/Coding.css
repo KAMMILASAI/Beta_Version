@@ -1,8 +1,30 @@
+/* Output panel styles */
+.editor-output {
+  margin-top: 0;
+  background: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 550px;
+  overflow: auto;
+}
+
+.editor-output-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.editor-output-pre {
+  white-space: pre-wrap;
+  margin: 0;
+}
 /* Coding Test Component Styles */
 
 .coding-container {
   width: 100%;
-  background: #ffffff;
+  background: #0b1120; /* dark base */
+  color: #e5e7eb; /* light text */
   min-height: 100vh;
   padding: 20px;
 }
@@ -10,20 +32,21 @@
 .coding-test {
   max-width: 1400px;
   margin: 0 auto;
-  background: #ffffff;
+  background: #0f172a; /* panel dark */
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
 /* Header Styles */
 .coding-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #0b1225 0%, #111827 100%);
+  color: #e5e7eb;
   padding: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-bottom: 1px solid #1f2937;
 }
 
 .header-left {
@@ -44,18 +67,17 @@
 }
 
 .language-select {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
+  background: #0f172a;
+  border: 1px solid #374151;
+  color: #e5e7eb;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 0.9rem;
-  backdrop-filter: blur(10px);
 }
 
 .language-select option {
-  background: #667eea;
-  color: white;
+  background: #111827;
+  color: #e5e7eb;
 }
 
 .header-timer {
@@ -67,27 +89,28 @@
 /* Progress Bar */
 .progress-section {
   padding: 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #1f2937;
 }
 
 .progress-info {
   display: flex;
   justify-content: space-between;
   font-size: 0.9rem;
-  color: #6b7280;
+  color: #9ca3af;
   margin-bottom: 10px;
 }
 
 .progress-bar {
   width: 100%;
-  background: #f3f4f6;
+  background: #0b1220;
+  border: 1px solid #1f2937;
   border-radius: 10px;
   height: 8px;
   overflow: hidden;
 }
 
 .progress-fill {
-  background: linear-gradient(90deg, #667eea, #764ba2);
+  background: linear-gradient(90deg, #60a5fa, #34d399);
   height: 100%;
   border-radius: 10px;
   transition: width 0.3s ease;
@@ -100,18 +123,19 @@
 
 .problem-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 0.9fr 1.1fr; /* make editor side slightly wider overall */
   gap: 20px;
   min-height: 500px;
 }
 
 /* Problem Panel */
 .problem-panel {
-  background: #f9fafb;
+  background: #111827;
   border-radius: 12px;
   padding: 20px;
   overflow-y: auto;
   max-height: 600px;
+  border: 1px solid #1f2937;
 }
 
 .problem-header {
@@ -125,7 +149,7 @@
   font-size: 1.3rem;
   font-weight: 600;
   margin: 0;
-  color: #1f2937;
+  color: #e5e7eb;
 }
 
 .difficulty-badge {
@@ -139,7 +163,7 @@
 .problem-description {
   margin-bottom: 20px;
   line-height: 1.6;
-  color: #374151;
+  color: #cbd5e1;
 }
 
 .problem-section {
@@ -147,19 +171,20 @@
 }
 
 .problem-section h4 {
-  color: #1f2937;
+  color: #e5e7eb;
   margin-bottom: 10px;
   font-weight: 600;
 }
 
 .example-block {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: #0f172a;
+  border: 1px solid #1f2937;
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 10px;
   font-family: 'Courier New', monospace;
   font-size: 0.9rem;
+  color: #e5e7eb;
 }
 
 .example-block div {
@@ -172,35 +197,46 @@
 }
 
 .constraints-list li {
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: #0f172a;
+  border: 1px solid #1f2937;
   border-radius: 6px;
   padding: 8px 12px;
   margin-bottom: 5px;
   font-family: 'Courier New', monospace;
   font-size: 0.9rem;
+  color: #e5e7eb;
 }
 
 /* Code Editor Panel */
 .editor-panel {
-  background: #1f2937;
+  background: #0b1220;
   border-radius: 12px;
   overflow: hidden;
+  border: 1px solid #1f2937;
+}
+
+/* New: two-column body inside editor panel */
+.editor-body {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr; /* code editor wider than console */
+  gap: 12px;
+  padding: 12px;
 }
 
 .editor-header {
-  background: #374151;
-  color: white;
+  background: #0f172a;
+  color: #e5e7eb;
   padding: 12px 16px;
   font-size: 0.9rem;
   font-weight: 500;
+  border-bottom: 1px solid #1f2937;
 }
 
 .code-editor {
   width: 100%;
   height: 550px;
-  background: #1f2937;
-  color: #f9fafb;
+  background: #0b1220;
+  color: #e5e7eb;
   border: none;
   padding: 20px;
   font-family: 'Courier New', monospace;
@@ -211,13 +247,13 @@
 }
 
 .code-editor:focus {
-  background: #111827;
+  background: #0b1120;
 }
 
 /* Navigation */
 .coding-navigation {
   padding: 20px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #1f2937;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -229,25 +265,26 @@
 }
 
 .problem-indicator {
-  color: #6b7280;
+  color: #9ca3af;
   font-size: 0.9rem;
 }
 
 /* Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  background: #0f172a; /* darker neutral */
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  padding: 6px 12px; /* even smaller */
+  border-radius: 6px;
   font-weight: 500;
+  font-size: 12px; /* even smaller */
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
 }
 
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  background: #111827;
+  border-color: #374151;
 }
 
 .btn-primary:disabled {
@@ -257,18 +294,20 @@
 }
 
 .btn-secondary {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  padding: 12px 24px;
-  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-weight: 500;
+  font-size: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .btn-secondary:hover {
-  background: #e5e7eb;
+  background: #111827;
+  border-color: #374151;
 }
 
 .btn-secondary:disabled {
@@ -277,25 +316,34 @@
 }
 
 .btn-submit {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
-  border: none;
-  padding: 12px 32px;
-  border-radius: 8px;
+  background: #0f172a; /* same as others */
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  padding: 6px 12px;
+  border-radius: 6px;
   font-weight: 600;
+  font-size: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
 }
 
 .btn-submit:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  background: #111827;
+  border-color: #374151;
 }
 
 .btn-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+/* Focus accessibility for all buttons */
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-submit:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
 }
 
 /* Loading State */
@@ -311,15 +359,15 @@
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #f3f4f6;
-  border-top: 4px solid #667eea;
+  border: 4px solid #1f2937;
+  border-top: 4px solid #60a5fa;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 .loading-text {
   font-size: 1.1rem;
-  color: #6b7280;
+  color: #9ca3af;
 }
 
 @keyframes spin {
@@ -331,15 +379,17 @@
 .coding-result {
   max-width: 600px;
   margin: 0 auto;
-  background: white;
+  background: #0f172a;
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+  border: 1px solid #1f2937;
 }
 
 .result-content {
   text-align: center;
   padding: 40px;
+  color: #e5e7eb;
 }
 
 .result-title {
@@ -357,11 +407,11 @@
 .result-score {
   font-size: 1.3rem;
   margin-bottom: 10px;
-  color: #1f2937;
+  color: #e5e7eb;
 }
 
 .result-percentage {
-  color: #6b7280;
+  color: #9ca3af;
   margin-bottom: 30px;
 }
 
@@ -375,7 +425,7 @@
 .no-problems {
   text-align: center;
   padding: 60px 20px;
-  color: #6b7280;
+  color: #9ca3af;
 }
 
 /* Responsive Design */
@@ -387,6 +437,10 @@
   
   .code-editor {
     height: 400px;
+  }
+
+  .editor-body {
+    grid-template-columns: 1fr; /* stack on smaller screens */
   }
 }
 

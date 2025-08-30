@@ -1,12 +1,11 @@
 import DashboardLayout from '../components/DashboardLayout';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { FiHome, FiUsers, FiUserCheck, FiBarChart2, FiMessageCircle, FiInbox, FiCreditCard, FiBell } from 'react-icons/fi';
+import { FiHome, FiUsers, FiMessageCircle, FiInbox, FiCreditCard, FiBell } from 'react-icons/fi';
 import Payments from './Payments';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import Candidates from './Candidates';
-import Recruiters from './Recruiters';
-import Analysis from './Analysis';
+// Removed separate Candidates/Recruiters pages in favor of unified Users page
+import Users from './Users';
 import Chat from './Chat';
 import SendNotification from './SendNotification';
 import Requests from './Requests';
@@ -23,7 +22,7 @@ export default function AdminDashboard() {
     const fetchRequestsCount = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/admin/pending-recruiters', {
+        const res = await axios.get('http://localhost:8080/api/admin/pending-recruiters', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setRequestsCount(res.data.count || 0);
@@ -39,7 +38,7 @@ export default function AdminDashboard() {
     const fetchTotal = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/admin/payments/total', {
+        const res = await axios.get('http://localhost:8080/api/admin/payments/total', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setTotalAmount(res.data.total || 0);
@@ -51,10 +50,12 @@ export default function AdminDashboard() {
     const fetchUnreadCount = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/chat/unread-count', {
+        const res = await axios.get('/api/chat/chats', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setUnreadCount(res.data.totalUnreadCount || 0);
+        const list = Array.isArray(res.data) ? res.data : [];
+        const total = list.reduce((sum, c) => sum + (Number(c.unreadCount) || 0), 0);
+        setUnreadCount(total);
       } catch (err) {
         console.error('Failed to fetch unread count:', err);
         setUnreadCount(0);
@@ -72,6 +73,7 @@ export default function AdminDashboard() {
   // Dynamic menu with count
   const adminMenu = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: <FiHome /> },
+    { label: 'Users', path: '/admin/users', icon: <FiUsers /> },
     { 
       label: (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
@@ -95,8 +97,7 @@ export default function AdminDashboard() {
       path: '/admin/requests', 
       icon: <FiInbox /> 
     },
-    { label: 'Candidates', path: '/admin/candidates', icon: <FiUsers /> },
-    { label: 'Recruiters', path: '/admin/recruiters', icon: <FiUserCheck /> },
+    // Removed: separate Candidates & Recruiters entries
     { 
       label: (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
@@ -136,8 +137,7 @@ export default function AdminDashboard() {
       <Routes>
         <Route path="dashboard" element={<AdminDashboardHome />} />
         <Route path="requests" element={<Requests />} />
-        <Route path="candidates" element={<Candidates />} />
-        <Route path="recruiters" element={<Recruiters />} />
+        <Route path="users" element={<Users />} />
         <Route path="chat" element={<Chat />} />
         <Route path="send-notification" element={<SendNotification />} />
         <Route path="payments" element={<Payments />} />

@@ -71,60 +71,94 @@ export default function DashboardHome() {
     numEmployees: 0
   });
 
+  // Generate mock data for fallback
+  const generateMockData = () => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+    const mockCandidates = months.map(month => ({
+      month,
+      count: Math.floor(Math.random() * 50) + 10 // 10-60
+    }));
+    
+    const mockDrives = months.map(month => ({
+      month,
+      count: Math.floor(Math.random() * 10) + 1 // 1-10
+    }));
+    
+    return {
+      totalCandidates: Math.floor(Math.random() * 900) + 100, // 100-1000
+      activeChats: Math.floor(Math.random() * 45) + 5, // 5-50
+      drivesConducted: Math.floor(Math.random() * 90) + 10, // 10-100
+      totalEmployees: Math.floor(Math.random() * 90) + 10, // 10-100
+      charts: {
+        candidatesByMonth: mockCandidates,
+        drivesByMonth: mockDrives
+      }
+    };
+  };
+
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      // Use Promise.all to fetch both stats and profile in parallel
       try {
-        const token = localStorage.getItem('token');
         const [statsRes, profileRes] = await Promise.all([
-          axios.get('/api/recruiter/dashboard-stats', {
-            headers: { Authorization: `Bearer ${token}` }
+          // Fetch stats with fallback to mock data
+          axios.get('http://localhost:8080/api/recruiter/dashboard-stats', {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 3000 // 3 second timeout
+          }).catch(err => {
+            console.log('Using fallback mock data for stats');
+            return { data: generateMockData() };
           }),
-          axios.get('/api/recruiter/profile', {
-            headers: { Authorization: `Bearer ${token}` }
+          
+          // Fetch profile with error handling
+          axios.get('http://localhost:8080/api/user/profile', {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 3000
+          }).catch(err => {
+            console.log('Using default profile data');
+            return { data: profile }; // Use existing profile state if fetch fails
           })
         ]);
         
-        // Normalize charts to avoid undefined access
+        // Process stats response
         const incoming = statsRes.data || {};
-        const normalized = {
+        setStats({
           totalCandidates: incoming.totalCandidates ?? 0,
           activeChats: incoming.activeChats ?? 0,
           drivesConducted: incoming.drivesConducted ?? 0,
           totalEmployees: incoming.totalEmployees ?? 0,
           charts: {
-            candidatesByMonth: Array.isArray(incoming?.charts?.candidatesByMonth) ? incoming.charts.candidatesByMonth : [],
-            drivesByMonth: Array.isArray(incoming?.charts?.drivesByMonth) ? incoming.charts.drivesByMonth : [],
+            candidatesByMonth: Array.isArray(incoming?.charts?.candidatesByMonth) 
+              ? incoming.charts.candidatesByMonth 
+              : [],
+            drivesByMonth: Array.isArray(incoming?.charts?.drivesByMonth) 
+              ? incoming.charts.drivesByMonth 
+              : [],
           },
-        };
-        setStats(normalized);
-        setProfile(profileRes.data);
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        // Fallback data for demo
-        setStats({
-          totalCandidates: 124,
-          activeChats: 12,
-          drivesConducted: 8,
-          totalEmployees: profile.numEmployees || 50,
-          charts: {
-            candidatesByMonth: [
-              { month: 'Mar', count: 15 },
-              { month: 'Apr', count: 25 },
-              { month: 'May', count: 18 },
-              { month: 'Jun', count: 32 },
-              { month: 'Jul', count: 28 },
-              { month: 'Aug', count: 6 },
-            ],
-            drivesByMonth: [
-              { month: 'Mar', count: 1 },
-              { month: 'Apr', count: 2 },
-              { month: 'May', count: 0 },
-              { month: 'Jun', count: 3 },
-              { month: 'Jul', count: 1 },
-              { month: 'Aug', count: 1 },
-            ]
-          }
         });
+        
+        // Process profile response
+        if (profileRes.data) {
+          setProfile(prev => ({
+            ...prev,
+            ...profileRes.data,
+            companyName: profileRes.data.companyName || prev.companyName,
+            location: profileRes.data.location || prev.location,
+            numEmployees: profileRes.data.numEmployees || prev.numEmployees,
+            website: profileRes.data.website || prev.website
+          }));
+        }
+      } catch (err) {
+        console.error('Error in dashboard data fetch:', err);
+        // Ensure we have some data to display even if there's an error
+        setStats(generateMockData());
       } finally {
         setLoading(false);
       }

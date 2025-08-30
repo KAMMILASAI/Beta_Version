@@ -13,7 +13,7 @@ export default function CandidateProfiles() {
       setError(null);
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/admin/candidates', {
+        const res = await axios.get('http://localhost:8080/api/admin/candidates', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setCandidates(res.data);

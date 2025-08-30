@@ -16,6 +16,12 @@ const googleLogo = (
   </svg>
 );
 
+const appleLogo = (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="#000" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16.365 1.43c0 1.14-.47 2.22-1.11 3.02-.66.82-1.77 1.45-2.87 1.36-.11-1.1.48-2.23 1.11-2.94.7-.85 1.93-1.46 2.87-1.44zM20.94 17.06c-.6 1.39-.9 1.99-1.7 3.21-1.1 1.67-2.65 3.75-4.55 3.76-1.06.02-1.78-.71-3.12-.71-1.35 0-2.13.69-3.2.72-1.9.07-3.35-1.8-4.45-3.46-2.43-3.7-2.69-8.03-1.19-10.34 1.07-1.7 2.76-2.68 4.35-2.68 1.62 0 2.64.73 3.98.73 1.31 0 2.09-.73 3.97-.73 1.47 0 3.02.8 4.09 2.19-3.6 1.98-3.02 7.13.82 8.11z"/>
+  </svg>
+);
+
 const githubLogo = (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="#333">
     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
@@ -87,7 +93,11 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+      const payload = {
+        email: (email || '').trim().toLowerCase(),
+        password: (password || '').trim()
+      };
+      const res = await axios.post(`${API_URL}/auth/login`, payload);
       
       if (res.data.otpRequired) {
         showSuccess('OTP sent to your email! Please check your inbox.');
@@ -119,7 +129,12 @@ const Login = () => {
     } catch (error) {
       console.error('Login error:', error);
       if (error.response?.status === 401) {
-        showError('Invalid email or password. Please try again.');
+        const msg = error.response?.data?.message || 'Invalid email or password. Please try again.';
+        // Common Spring messages for disabled account
+        const friendly = /disabled|User is disabled/i.test(msg)
+          ? 'Your account is not verified/enabled yet. Please verify via OTP or contact support.'
+          : msg;
+        showError(friendly);
       } else if (error.response?.data?.message) {
         showError(error.response.data.message);
       } else {
@@ -140,7 +155,7 @@ const Login = () => {
     setError('');
     
     try {
-      const res = await axios.post(`${API_URL}/auth/verify-login-otp`, { email, otp });
+      const res = await axios.post(`${API_URL}/auth/verify-login-otp`, { email: (email || '').trim().toLowerCase(), otp: (otp || '').trim() });
       
       if (res.data.accessToken || res.data.token) {
         const token = res.data.accessToken || res.data.token;
@@ -182,48 +197,14 @@ const Login = () => {
   }, []);
 
   return (
-    <div className="auth-container">
+    <div className="auth-container login-page">
+      {/* Left: Form */}
       <div className="left-box">
-        <div className="floating-elements">
-          <div className="floating-element element-1"></div>
-          <div className="floating-element element-2"></div>
-          <div className="floating-element element-3"></div>
-          <div className="floating-element element-4"></div>
-          <div className="floating-element element-5"></div>
-        </div>
-        <div className="brand-section">
-          <div className="logo-container">
-            <img src="/logo.png" alt="SmartHireX Logo" className="auth-logo" />
-            <div className="logo-glow"></div>
-          </div>
-          <h1 className="brand-title">
-            Welcome to <span className="brand-highlight">SmartHireX</span>
-          </h1>
-          <p className="brand-subtitle">Your gateway to exceptional talent and opportunities</p>
-          <div className="feature-list">
-            <div className="feature-item">
-              <div className="feature-icon">🚀</div>
-              <span>Fast & Secure Login</span>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">🔒</div>
-              <span>Advanced Security</span>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">⚡</div>
-              <span>Instant Access</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="right-box">
         <div className="auth-card">
           <div className="card-header">
-            <h2 className="card-title">Welcome Back</h2>
-            <p className="card-subtitle">Sign in to continue your journey</p>
+            <h2 className="card-title">Welcome Back!!</h2>
           </div>
-          
+
           <form onSubmit={showOtp ? (e) => { e.preventDefault(); handleOtpVerify(); } : handleLogin} className="auth-form">
             <div className="input-group">
               <div className="input-container">
@@ -236,9 +217,9 @@ const Login = () => {
                   required 
                   className={email ? 'has-value' : ''}
                 />
-                <label htmlFor="loginEmail">Email Address</label>
+                <label htmlFor="loginEmail">Email</label>
               </div>
-              
+
               {!showOtp && (
                 <div className="input-container password-container">
                   <input 
@@ -253,31 +234,16 @@ const Login = () => {
                   <label htmlFor="loginPassword">Password</label>
                   <button 
                     type="button" 
-                    className="password-toggle"
+                    className="password-eye-toggle-btn"
                     onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '1rem',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#888',
-                      cursor: 'pointer',
-                      padding: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 999,
-                      width: '20px',
-                      height: '20px'
-                    }}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? eyeOffIcon : eyeIcon}
                   </button>
                 </div>
               )}
-              
+
               {showOtp && (
                 <div className="input-container otp-container">
                   <input 
@@ -293,24 +259,15 @@ const Login = () => {
                 </div>
               )}
             </div>
-            
+
             {!showOtp && (
               <div className="form-options">
-                <label className="checkbox-container">
-                  <input 
-                    type="checkbox" 
-                    checked={rememberMe} 
-                    onChange={e => setRememberMe(e.target.checked)}
-                  />
-                  <span className="checkmark"></span>
-                  <span className="checkbox-text">Remember me</span>
-                </label>
                 <Link to="/forgot-password" className="forgot-password-link">
-                  Forgot password?
+                  Forgot Password?
                 </Link>
               </div>
             )}
-            
+
             <button 
               type="submit" 
               className={`auth-btn ${isLoading ? 'loading' : ''}`}
@@ -323,36 +280,30 @@ const Login = () => {
                 </>
               ) : (
                 <>
-                  <span>{showOtp ? 'Verify OTP' : 'Sign In'}</span>
-                  <div className="btn-arrow">→</div>
+                  <span>Login</span>
                 </>
               )}
             </button>
-            
-            {/* Success Message */}
+
             {success && (
               <div className="success-message">
                 <div className="success-icon">✅</div>
                 <span>{success}</span>
               </div>
             )}
-            
-            {/* Error Message */}
+
             {error && (
               <div className="error-message">
                 <div className="error-icon">❌</div>
                 <span>{error}</span>
               </div>
             )}
-            
+
             {!showOtp && (
               <>
-                {/* Divider */}
                 <div className="divider">
-                  <span>or continue with</span>
+                  <span>- or -</span>
                 </div>
-                
-                {/* Social Login Buttons */}
                 <div className="social-login-container">
                   <button 
                     type="button"
@@ -376,13 +327,163 @@ const Login = () => {
                   >
                     {githubLogo}
                   </button>
+                  <button 
+                    type="button"
+                    className="social-btn apple-btn"
+                    title="Continue with Apple"
+                  >
+                    {appleLogo}
+                  </button>
                 </div>
               </>
             )}
-            
-            {/* Navigation Link to Register */}
+
             <div className="auth-nav-link">
-              Don't have an account? <span className="nav-link-btn" onClick={() => navigate('/register')}>Create Account</span>
+              Don't have an account? <span className="nav-link-btn" onClick={() => navigate('/register')}>Sign up</span>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Right: Illustration */}
+      <div className="right-box">
+        <div className="illustration-wrap">
+          <div className="right-oval"></div>
+          <img src="/Auth-logo.png" alt="Illustration" className="illustration-img" />
+        </div>
+        
+        {/* Mobile Form - Duplicate for mobile view */}
+        <div className="mobile-auth-card">
+          <div className="mobile-auth-header">
+            <div className="mobile-logo-section">
+              <h1>Login</h1>
+              <img src="/Auth-logo.png" alt="SmartHireX Logo" className="mobile-auth-logo" />
+            </div>
+          </div>
+          <div className="card-header">
+            <p className="card-subtitle">Sign in to your account to continue.</p>
+          </div>
+          <form onSubmit={showOtp ? (e) => { e.preventDefault(); handleOtpVerify(); } : handleLogin} className="auth-form">
+            <div className="input-group">
+              <div className="input-container">
+                <input 
+                  id="mobileLoginEmail" 
+                  type="email"
+                  value={email} 
+                  onChange={e=>setEmail(e.target.value)} 
+                  placeholder=" " 
+                  required 
+                  className={email ? 'has-value' : ''}
+                />
+                <label htmlFor="mobileLoginEmail">Email</label>
+              </div>
+
+              {!showOtp && (
+                <div className="input-container password-container">
+                  <input 
+                    id="mobileLoginPassword" 
+                    type={showPassword ? 'text' : 'password'} 
+                    value={password} 
+                    onChange={e=>setPassword(e.target.value)} 
+                    placeholder=" " 
+                    required 
+                    className={password ? 'has-value' : ''}
+                  />
+                  <label htmlFor="mobileLoginPassword">Password</label>
+                  <button 
+                    type="button" 
+                    className="password-eye-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? eyeOffIcon : eyeIcon}
+                  </button>
+                </div>
+              )}
+
+              {showOtp && (
+                <div className="input-container otp-container">
+                  <input 
+                    id="mobileLoginOtp" 
+                    value={otp} 
+                    onChange={e=>setOtp(e.target.value)} 
+                    placeholder=" " 
+                    required 
+                    maxLength="6"
+                    className={otp ? 'has-value' : ''}
+                  />
+                  <label htmlFor="mobileLoginOtp">Enter 6-digit OTP</label>
+                </div>
+              )}
+            </div>
+
+            {!showOtp && (
+              <div className="form-options">
+                <Link to="/forgot-password" className="forgot-password-link">
+                  Forgot Password?
+                </Link>
+              </div>
+            )}
+
+            <button 
+              type="submit" 
+              className={`auth-btn ${isLoading ? 'loading' : ''}`}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <div className="btn-spinner"></div>
+                  <span>{showOtp ? 'Verifying...' : 'Signing in...'}</span>
+                </>
+              ) : (
+                <>
+                  <span>Login</span>
+                </>
+              )}
+            </button>
+
+            {!showOtp && (
+              <>
+                <div className="divider">
+                  <span>- or -</span>
+                </div>
+                <div className="social-login-container">
+                  <button 
+                    type="button"
+                    className="social-btn google-btn" 
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      window.location.href = `${API_URL}/oauth2/authorize/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                    }}
+                    title="Continue with Google"
+                  >
+                    {googleLogo}
+                  </button>
+                  <button 
+                    type="button"
+                    className="social-btn github-btn" 
+                    onClick={() => {
+                      const redirectUri = `${window.location.origin}/oauth2/redirect`;
+                      window.location.href = `${API_URL}/oauth2/authorize/github?redirect_uri=${encodeURIComponent(redirectUri)}`;
+                    }}
+                    title="Continue with GitHub"
+                  >
+                    {githubLogo}
+                  </button>
+                  <button 
+                    type="button"
+                    className="social-btn apple-btn"
+                    title="Continue with Apple"
+                  >
+                    {appleLogo}
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className="auth-nav-link">
+              Don't have an account? <span className="nav-link-btn" onClick={() => navigate('/register')}>Sign up</span>
             </div>
           </form>
         </div>

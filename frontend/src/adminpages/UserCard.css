@@ -1,20 +1,115 @@
 /* Container */
 .user-list-container {
   padding: 30px 40px 50px;
-  background-color: #f8fafc;
+  background-color: #0f172a; /* dark slate */
   min-height: 100vh;
   box-sizing: border-box;
 }
+
+/* Ensure no pseudo-element glare */
+.user-card::before,
+.user-card::after { content: none !important; display: none !important; }
 
 /* Section Heading */
 .user-list-container h2 {
   font-size: 1.8rem;
   font-weight: 700;
-  color: #1e293b;
+  color: #e5e7eb;
   margin: 0 0 30px 0;
   padding-bottom: 15px;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid #1f2937;
 }
+
+/* Users toolbar (tabs + search) */
+.users-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.users-toolbar h2 { margin: 0; border-bottom: none; }
+
+.users-toolbar .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tabs { display: flex; gap: 8px; }
+
+.tab {
+  background: #0b1323;
+  color: #cbd5e1;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tab.active {
+  background: #111827;
+  border-color: #2b3a55;
+  color: #e5e7eb;
+}
+
+.search-input {
+  background: #0b1323;
+  color: #e5e7eb;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-width: 240px;
+  outline: none;
+}
+
+.search-input::placeholder { color: #94a3b8; }
+
+/* Dropdown filter */
+.filter-select {
+  background: #0b1323 !important;
+  color: #e5e7eb !important;
+  border: 1px solid #1f2937 !important;
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  line-height: 1.25;
+  background-clip: padding-box;
+  /* Paint inner area to prevent white UA fill on some platforms */
+  box-shadow: inset 0 0 0 999px #0b1323;
+  cursor: pointer;
+  /* Force custom appearance for consistent dark theme */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Custom chevron */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e5e7eb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 36px; /* room for chevron */
+}
+
+.filter-select:hover {
+  border-color: #2b3a55;
+}
+
+.filter-select:focus {
+  outline: 2px solid #334155;
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 999px #0b1323, 0 0 0 3px rgba(51, 65, 85, 0.35);
+}
+
+/* Options in dark theme */
+.filter-select option {
+  background-color: #0b1323;
+  color: #e5e7eb;
+}
+
+/* Hide default arrow in old IE/Edge */
+.filter-select::-ms-expand { display: none; }
 
 /* Grid Layout */
 .user-card-list {
@@ -29,25 +124,30 @@
 
 /* Card Style */
 .user-card {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #0f172a; /* neutral dark */
+  background-image: none !important; /* remove any highlight */
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); /* deeper, no white glare */
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease, background-color 0.25s ease;
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  gap: 12px;
   text-align: left;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #1f2937; /* subtle border */
   height: auto;
   box-sizing: border-box;
 }
 
 /* Card Hover */
 .user-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
-  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
+  border-color: #2b3a55;
+  background-color: #111827;
 }
 
 .user-avatar-container {
@@ -55,16 +155,17 @@
   gap: 16px;
   width: 100%;
   align-items: flex-start;
-} 
+}
+
 /* Avatar */
 .user-avatar {
   width: 60px;
   height: 60px;
   border-radius: 12px;
   object-fit: cover;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  border: 1px solid #2a3a56;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(135deg, #1a2540 0%, #0f172a 100%);
   flex-shrink: 0;
 }
 
@@ -78,7 +179,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -86,7 +187,7 @@
 .user-name {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #f3f4f6;
   margin: 0;
   line-height: 1.4;
   white-space: nowrap;
@@ -97,19 +198,47 @@
 /* Email */
 .user-email {
   font-size: 0.88rem;
-  color: #64748b;
+  color: #a9b8cc;
   word-break: break-word;
   line-height: 1;
   margin: 0;
 }
 
+/* Plain delete icon (not a button) */
+.delete-icon {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: #ef4444; /* solid red */
+  cursor: pointer;
+  transition: color 0.15s ease;
+  background: transparent !important;
+  border: none !important;
+  padding: 6px; /* larger hit area without visual button */
+  border-radius: 999px; /* circular hit area */
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2; /* keep above any effects */
+}
+.delete-icon:hover { color: #ef4444; }
+.delete-icon.loading { cursor: default; }
+
+/* small spinner for delete loading */
+.loading-spinner.small {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 /* College Info */
 .user-meta {
   font-size: 0.88rem;
-  color: #475569;
+  color: #cbd5e1;
   margin: -15px 0 0;
   padding-top: 8px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #1f2937;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -118,7 +247,7 @@
 
 .user-meta b {
   font-weight: 600;
-  color: #1e40af;
+  color: #e5e7eb;
 }
 
 /* Delete Button */
@@ -126,10 +255,10 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  background-color: #fef2f2;
-  color: #dc2626;
-  border: none;
-  border-radius: 6px;
+  background-color: transparent;
+  color: #a3b1c6;
+  border: 1px solid #334155;
+  border-radius: 10px;
   width: 32px;
   height: 32px;
   display: flex;
@@ -137,20 +266,18 @@
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  opacity: 0;
-  transform: scale(20);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  opacity: 1;
+  transform: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-.user-card:hover .delete-btn {
-  opacity: 1;
-  transform: scale(1);
-}
+.user-card:hover .delete-btn { opacity: 1; }
 
 .delete-btn:hover {
-  background-color: #fee2e2;
-  color: #b91c1c;
-  transform: scale(1.1) !important;
+  background-color: rgba(239, 68, 68, 0.18);
+  color: #ffffff;
+  border-color: rgba(239, 68, 68, 0.55);
+  transform: scale(1.05) !important;
 }
 
 .delete-btn:active {

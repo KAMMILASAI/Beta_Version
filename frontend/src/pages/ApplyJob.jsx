@@ -7,11 +7,34 @@ export default function ApplyJob() {
   const [job, setJob] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', college: '', regNo: '', cgpa: '', skills: '' });
   const [msg, setMsg] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  const normalizeDate = (val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    if (typeof val === 'number') return new Date(val < 1e12 ? val * 1000 : val);
+    try { return new Date(val); } catch { return null; }
+  };
 
   useEffect(() => {
+    setJob(null);
+    setMsg('');
+    setIsError(false);
     axios.get(`/api/jobs/${linkId}`)
-      .then(res => setJob(res.data))
-      .catch(() => setMsg('Invalid or expired link'));
+      .then(res => {
+        const j = res.data;
+        const exp = j?.expiresAt ? normalizeDate(j.expiresAt) : null;
+        if (exp && exp <= new Date()) {
+          setMsg('This job link has expired.');
+          setIsError(true);
+        } else {
+          setJob(j);
+        }
+      })
+      .catch(() => {
+        setMsg('Invalid or expired link');
+        setIsError(true);
+      });
   }, [linkId]);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
@@ -26,8 +49,10 @@ export default function ApplyJob() {
       };
       await axios.post(`/api/jobs/${linkId}/apply`, payload);
       setMsg('Application submitted! Check your email for confirmation.');
+      setIsError(false);
     } catch (e) {
       setMsg(e.response?.data?.message || 'Failed to apply');
+      setIsError(true);
     }
   };
 
@@ -56,7 +81,9 @@ export default function ApplyJob() {
         ))}
         <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Apply</button>
       </form>
-      {msg && <p className="mt-4 text-center text-green-600">{msg}</p>}
+      {msg && (
+        <p className={`mt-4 text-center ${isError ? 'text-red-600' : 'text-green-600'}`}>{msg}</p>
+      )}
     </div>
   );
 }

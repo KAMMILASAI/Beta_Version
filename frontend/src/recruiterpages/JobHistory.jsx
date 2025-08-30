@@ -4,6 +4,25 @@ import axios from 'axios';
 
 export default function JobHistory() {
   const [jobs, setJobs] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const normalizeDate = (val) => {
+    if (!val) return null;
+    if (typeof val === 'string') return new Date(val);
+    if (typeof val === 'number') return new Date(val < 1e12 ? val * 1000 : val);
+    try { return new Date(val); } catch { return null; }
+  };
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    skills: '',
+    company: '',
+    location: '',
+    minCgpa: '',
+    minBacklogs: '',
+    ctc: '',
+    employmentType: 'fulltime', // fulltime | remote | on-site
+    expiresAt: ''
+  });
   const [selectedJob, setSelectedJob] = useState(null);
   const [apps, setApps] = useState([]);
   const [appsLoading, setAppsLoading] = useState(false);
@@ -28,6 +47,42 @@ export default function JobHistory() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!form.title?.trim()) {
+      alert('Job title is required');
+      return;
+    }
+    try {
+      setCreating(true);
+      const token = localStorage.getItem('token');
+      const payload = {
+        ...form,
+        // coerce numeric fields if provided
+        minCgpa: form.minCgpa !== '' ? Number(form.minCgpa) : undefined,
+        minBacklogs: form.minBacklogs !== '' ? Number(form.minBacklogs) : undefined,
+        expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : undefined,
+      };
+      const res = await axios.post('/api/jobs', payload, { headers: { Authorization: `Bearer ${token}` } });
+      setJobs(prev => [res.data, ...prev]);
+      if (res?.data?.jobCode) {
+        alert(`Job created. Code: ${res.data.jobCode}`);
+      }
+      // reset minimal fields except employmentType
+      setForm({ title: '', description: '', skills: '', company: '', location: '', minCgpa: '', minBacklogs: '', ctc: '', employmentType: form.employmentType, expiresAt: '' });
+    } catch (err) {
+      console.error(err);
+      alert('Failed to create job');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const deleteJob = async (e, jobId) => {
     e.stopPropagation();
@@ -60,7 +115,7 @@ export default function JobHistory() {
 
   if (loading) return <p className="mt-10 text-center">Loading...</p>;
 
-  if (!jobs.length) return <p className="mt-10 text-center">No jobs created yet.</p>;
+  // Render create form + (maybe) empty state below
 
   if (selectedJob) {
     return (
@@ -281,15 +336,79 @@ export default function JobHistory() {
   }
 
   return (
-    <div style={{
-      padding: '24px',
-      display: 'grid',
-      gridTemplateColumns: 'repeat(3, 1fr)',
-      gap: '24px',
-      width: '100%',
-      maxWidth: '1400px',
-      margin: '0 auto'
-    }}>
+    <div style={{ padding: '24px', width: '100%', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Create Job Form */}
+      <div style={{
+        background: '#ffffff',
+        borderRadius: '12px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        border: '1px solid #f1f5f9',
+        padding: '20px',
+        marginBottom: '24px'
+      }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '12px', color: '#0f172a' }}>Create Job</h2>
+        <form onSubmit={handleCreate} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ gridColumn: '1 / span 2' }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Job Title</label>
+            <input name="title" value={form.title} onChange={handleChange} placeholder="e.g., Java Backend Engineer" required style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Company</label>
+            <input name="company" value={form.company} onChange={handleChange} placeholder="e.g., SmartHireX" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Location</label>
+            <input name="location" value={form.location} onChange={handleChange} placeholder="e.g., Remote / Bangalore" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div style={{ gridColumn: '1 / span 2' }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Description</label>
+            <textarea name="description" value={form.description} onChange={handleChange} rows={4} placeholder="Role description, responsibilities, requirements..." style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div style={{ gridColumn: '1 / span 2' }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Skills (comma separated)</label>
+            <input name="skills" value={form.skills} onChange={handleChange} placeholder="Java, Spring Boot, SQL" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Min CGPA</label>
+            <input name="minCgpa" type="number" step="0.01" value={form.minCgpa} onChange={handleChange} placeholder="e.g., 7.0" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Min Backlogs</label>
+            <input name="minBacklogs" type="number" value={form.minBacklogs} onChange={handleChange} placeholder="e.g., 0" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>CTC</label>
+            <input name="ctc" value={form.ctc} onChange={handleChange} placeholder="e.g., 8-12 LPA" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Employment Type</label>
+            <select name="employmentType" value={form.employmentType} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+              <option value="fulltime">Full-time</option>
+              <option value="remote">Remote</option>
+              <option value="on-site">On-site</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / span 2' }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>Expires At</label>
+            <input type="datetime-local" name="expiresAt" value={form.expiresAt} onChange={handleChange} style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 8 }} />
+          </div>
+          <div style={{ gridColumn: '1 / span 2', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button type="submit" disabled={creating} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 8, padding: '10px 14px', cursor: 'pointer', fontWeight: 600 }}>
+              {creating ? 'Creating...' : 'Create Job'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* History Grid */}
+      {jobs.length === 0 ? (
+        <p className="mt-10 text-center">No jobs created yet.</p>
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '24px'
+        }}>
       {jobs.map((j, i) => (
         <div key={j._id} style={{
           background: gradientClasses[i % gradientClasses.length],
@@ -344,6 +463,35 @@ export default function JobHistory() {
           >
             {j.title}
           </h3>
+          {j.jobCode && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '10px'
+            }}>
+              <span style={{
+                background: 'rgba(0,0,0,0.2)',
+                padding: '4px 10px',
+                borderRadius: '12px',
+                fontSize: '0.85rem',
+                fontWeight: 600
+              }}>
+                Code: {j.jobCode}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(j.jobCode); alert('Job code copied'); }}
+                style={{
+                  background: 'rgba(255,255,255,0.15)',
+                  border: 'none',
+                  color: 'white',
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  cursor: 'pointer'
+                }}
+              >Copy</button>
+            </div>
+          )}
           <div style={{ marginBottom: '12px' }}>
             <p style={{
               color: 'rgba(255, 255, 255, 0.9)',
@@ -359,7 +507,7 @@ export default function JobHistory() {
                 <line x1="8" y1="2" x2="8" y2="6"></line>
                 <line x1="3" y1="10" x2="21" y2="10"></line>
               </svg>
-              {new Date(j.createdAt).toLocaleDateString()}
+              {normalizeDate(j.createdAt)?.toLocaleDateString() || '—'}
             </p>
             <p style={{
               color: 'rgba(255, 255, 255, 0.9)',
@@ -373,7 +521,7 @@ export default function JobHistory() {
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12 6 12 12 16 14"></polyline>
               </svg>
-              Expires: {new Date(j.expiresAt).toLocaleString()}
+              Expires: {normalizeDate(j.expiresAt)?.toLocaleString() || 'No expiry'}
             </p>
             <div style={{
               display: 'inline-flex',
@@ -490,6 +638,8 @@ export default function JobHistory() {
           </div>
         </div>
       ))}
+        </div>
+      )}
     </div>
   );
 }

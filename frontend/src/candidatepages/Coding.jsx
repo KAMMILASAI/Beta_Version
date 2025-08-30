@@ -1,37 +1,85 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './Coding.css';
+import './MCQs.css';
 import logo from '../assets/logo.png';
 
 export default function Coding() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const containerRef = useRef(null);
+  const abortRef = useRef(null);
+  const navState = (location && location.state) || {};
   const [problems, setProblems] = useState([]);
   const [currentProblem, setCurrentProblem] = useState(0);
   const [solutions, setSolutions] = useState({});
+  const [timerEnabled, setTimerEnabled] = useState(() => {
+    const fromNav = typeof navState.timerEnabled === 'boolean' ? navState.timerEnabled : true;
+    return fromNav;
+  });
   const [timeLeft, setTimeLeft] = useState(() => {
     const saved = sessionStorage.getItem('coding_timeLeft');
-    return saved ? Number(saved) : 3600; // 60 minutes
+    if (saved) return Number(saved);
+    const fromNav = navState && typeof navState.timerMinutes === 'number' ? navState.timerMinutes * 60 : null;
+    if (timerEnabled) return fromNav ?? 3600; // default 60 minutes
+    return 0;
   });
+
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [score, setScore] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [language, setLanguage] = useState('javascript');
-  const [showTerms, setShowTerms] = useState(true);
-  const [examStarted, setExamStarted] = useState(false);
+  const [language, setLanguage] = useState('java');
+  const [showTerms, setShowTerms] = useState(false);
+  const [examStarted, setExamStarted] = useState(true);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
-  const [webcamStream, setWebcamStream] = useState(null);
-  const [webcamPermission, setWebcamPermission] = useState('pending');
   const [showQuestionStatus, setShowQuestionStatus] = useState(false);
   const [theme, setTheme] = useState('dark'); // match MCQs theme handling
+  const [runOutput, setRunOutput] = useState('');
+  const [testResults, setTestResults] = useState(null);
+  const [isRunning, setIsRunning] = useState(false);
 
-  const location = useLocation();
   const query = new URLSearchParams(location.search);
   const companyOrRecruiter =
     query.get('company') || query.get('recruiter') || 'SmartHire Platform';
 
   useEffect(() => {
-    // Load coding problems
-    loadProblems();
+    // Initialize timer settings from navigation
+    if (typeof navState.timerEnabled === 'boolean') setTimerEnabled(navState.timerEnabled);
+    // If problems are provided via navigation state, use them; otherwise load from API/mock
+    if (Array.isArray(navState.problems) && navState.problems.length > 0) {
+      const provided = navState.problems;
+      setProblems(provided);
+
+      // Initialize solutions for current language if not present in localStorage
+      const storageKey = `coding_solutions_${language}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setSolutions(JSON.parse(saved));
+      } else {
+        const initialSolutions = {};
+        provided.forEach((p) => {
+          let starter = p?.starterCode?.[language] ?? '';
+          if (!starter) {
+            if (language === 'python') {
+              starter = `# Hello World (Python)\nprint(\"Hello, World!\")\n`;
+            } else if (language === 'java') {
+              starter = `// Hello World (Java)\npublic class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, World!\");\n  }\n}\n`;
+            } else if (language === 'cpp') {
+              starter = `// Hello World (C++)\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n  cout << \"Hello, World!\";\n  return 0;\n}\n`;
+            } else if (language === 'c') {
+              starter = `// Hello World (C)\n#include <stdio.h>\nint main(){\n  printf(\"Hello, World!\");\n  return 0;\n}\n`;
+            }
+          }
+          initialSolutions[p.id] = starter;
+        });
+        setSolutions(initialSolutions);
+        localStorage.setItem(storageKey, JSON.stringify(initialSolutions));
+      }
+    } else {
+      // Load coding problems from API/mock
+      loadProblems();
+    }
   }, []);
 
   useEffect(() => {
@@ -40,8 +88,10 @@ export default function Coding() {
       enterFullscreen();
       // Disable security features
       disableSecurityFeatures();
+      // Auto-open problem status sidebar for visibility
+      setShowQuestionStatus(true);
     }
-    
+
     return () => {
       if (examStarted) {
         enableSecurityFeatures();
@@ -49,15 +99,172 @@ export default function Coding() {
     };
   }, [examStarted]);
 
+  // Simple JS sandbox runner (outside effects)
+  const runUserCode = (code, inputArg) => {
+    const logs = [];
+    const fakeConsole = { log: (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')) };
+    try {
+      const fn = new Function('input', 'console', `${code}\n;return (typeof solution==='function') ? solution(input) : undefined;`);
+      const result = fn(inputArg, fakeConsole);
+      return { result, logs, error: null };
+    } catch (err) {
+      return { result: null, logs, error: String(err) };
+    }
+  };
+
+// Cancel current run/tests
+const handleCancel = () => {
+  try {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+  } catch (_) {}
+  setIsRunning(false);
+  setRunOutput((prev) => (prev ? `${prev}\nCanceled by user` : 'Canceled by user'));
+};
+
+  // Helper to call backend judge for non-JS languages with timeout/cancellation
+  const judgeRun = async ({ language: lang, code, input, timeoutMs = 20000, signal }) => {
+    const controller = signal ? null : new AbortController();
+    const usedSignal = signal || controller?.signal;
+    try {
+      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+      const resp = await axios.post(
+        '/api/judge',
+        { language: lang, code, input },
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: usedSignal,
+          timeout: timeoutMs,
+        }
+      );
+      const data = resp?.data || {};
+      // Normalize common fields
+      const output = data.output ?? data.stdout ?? data.result ?? '';
+      const error = data.error ?? data.stderr ?? null;
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      return { output, error, logs };
+    } catch (err) {
+      const isAborted = err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED';
+      const isTimeout = err?.code === 'ECONNABORTED' || /timeout/i.test(String(err?.message || ''));
+      const msg = isAborted ? 'Request was canceled' : (isTimeout ? 'Execution timed out' : (err?.response?.data?.message || err.message || String(err)));
+      return { output: '', error: msg, logs: [] };
+    } finally {
+      // no-op
+    }
+  };
+
+  const handleRun = async () => {
+    const code = solutions[currentProb?.id] || '';
+    const first = currentProb?.examples?.[0];
+    let input = undefined;
+    if (first?.input) {
+      try { input = JSON.parse(first.input); } catch { input = first.input; }
+    }
+    setIsRunning(true);
+    try {
+      // JS path retained for completeness (not selectable in UI)
+      if (language === 'javascript') {
+        const { result, logs, error } = runUserCode(code, input);
+        if (error) {
+          setRunOutput(`Error: ${error}\nLogs:\n${logs.join('\n')}`);
+        } else {
+          setRunOutput(`Result: ${typeof result === 'object' ? JSON.stringify(result) : String(result)}\nLogs:\n${logs.join('\n')}`);
+        }
+        return;
+      }
+
+      // Non-JS: call backend judge with timeout
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const { output, error, logs } = await judgeRun({ language, code, input, timeoutMs: 20000, signal: controller.signal });
+      if (error) {
+        setRunOutput(`Error: ${error}\nLogs:\n${(logs || []).join('\n')}`);
+      } else {
+        const logsText = logs && logs.length ? `\nLogs:\n${logs.join('\n')}` : '';
+        setRunOutput(`Output: ${typeof output === 'object' ? JSON.stringify(output) : String(output)}${logsText}`);
+      }
+    } catch (e) {
+      setRunOutput(`Error: ${String(e)}`);
+    } finally {
+      setIsRunning(false);
+      abortRef.current = null;
+    }
+  };
+
+  const handleRunTests = async () => {
+    const ex = Array.isArray(currentProb?.examples) ? currentProb.examples : [];
+    if (ex.length === 0) {
+      setTestResults({ supported: true, total: 0, passed: 0, cases: [] });
+      return;
+    }
+    const code = solutions[currentProb?.id] || '';
+    setIsRunning(true);
+    try {
+      if (language === 'javascript') {
+        const cases = ex.map((e, idx) => {
+          let input = e.input;
+          try { input = JSON.parse(e.input); } catch {/* keep raw */}
+          const { result, error } = runUserCode(code, input);
+          const expectedRaw = e.output;
+          let pass = false;
+          try {
+            const expected = JSON.parse(expectedRaw);
+            pass = JSON.stringify(result) === JSON.stringify(expected);
+          } catch {
+            pass = String(result) === String(expectedRaw);
+          }
+          return { idx: idx + 1, pass, got: result, expected: expectedRaw, error };
+        });
+        const passed = cases.filter(c => c.pass && !c.error).length;
+        setTestResults({ supported: true, total: cases.length, passed, cases });
+        return;
+      }
+
+      // Non-JS: call backend judge for each example with timeout
+      const cases = [];
+      const controller = new AbortController();
+      abortRef.current = controller;
+      for (let i = 0; i < ex.length; i++) {
+        const e = ex[i];
+        let input = e.input;
+        try { input = JSON.parse(e.input); } catch {/* keep raw */}
+        const { output, error } = await judgeRun({ language, code, input, timeoutMs: 20000, signal: controller.signal });
+        const expectedRaw = e.output;
+        let pass = false;
+        if (!error) {
+          try {
+            const expected = JSON.parse(expectedRaw);
+            pass = JSON.stringify(output) === JSON.stringify(expected);
+          } catch {
+            pass = String(output) === String(expectedRaw);
+          }
+        }
+        cases.push({ idx: i + 1, pass, got: output, expected: expectedRaw, error });
+        if (error === 'Request was canceled') {
+          break;
+        }
+      }
+      const passed = cases.filter(c => c.pass && !c.error).length;
+      setTestResults({ supported: true, total: cases.length, passed, cases });
+    } catch (e) {
+      setTestResults({ supported: true, total: 0, passed: 0, cases: [], error: String(e) });
+    } finally {
+      setIsRunning(false);
+      abortRef.current = null;
+    }
+  };
+
   useEffect(() => {
-    // Timer countdown
+    // Timer countdown (only if enabled)
+    if (!timerEnabled) return;
     if (timeLeft > 0 && !isSubmitted) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
-    } else if (timeLeft === 0) {
+    } else if (timeLeft === 0 && !isSubmitted) {
       handleSubmit();
     }
-  }, [timeLeft, isSubmitted]);
+  }, [timeLeft, isSubmitted, timerEnabled]);
 
   // Persist timer each tick
   useEffect(() => {
@@ -69,7 +276,7 @@ export default function Coding() {
     const body = document.body;
     const htmlEl = document.documentElement;
     const rootEl = document.getElementById('root');
-    [htmlEl, body, rootEl].forEach(el => {
+    [htmlEl, body, rootEl].forEach((el) => {
       if (!el) return;
       el.classList.remove('theme-dark', 'theme-light');
       el.classList.add(`theme-${theme}`);
@@ -79,6 +286,11 @@ export default function Coding() {
   const loadProblems = async () => {
     setLoading(true);
     try {
+      // If navigation already provided problems, skip fetch
+      if (Array.isArray(navState.problems) && navState.problems.length > 0) {
+        setLoading(false);
+        return;
+      }
       // Try API first (AI-generated coding question), fallback to mock
       const token = localStorage.getItem('token');
       let finalProblems = [];
@@ -101,62 +313,64 @@ export default function Coding() {
             examples: Array.isArray(q.examples) ? q.examples : [],
             constraints: Array.isArray(q.constraints) ? q.constraints : [],
             starterCode: { [language]: q.starter || '' },
-            technology: q.technology || tech
+            technology: q.technology || tech,
           };
           finalProblems = [mapped];
         }
       } catch (e) {
-        // ignore, we'll use mock below
-      }
-
-      if (finalProblems.length === 0) {
-        // Minimal mock fallback
-        finalProblems = [
-          {
-            id: 1,
-            title: 'Two Sum',
-            difficulty: 'Easy',
-            description:
-              'Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target.',
-            examples: [
-              {
-                input: 'nums = [2,7,11,15], target = 9',
-                output: '[0,1]',
-                explanation: 'Because nums[0] + nums[1] == 9, we return [0, 1].'
-              }
-            ],
-            constraints: [
-              '2 <= nums.length <= 10^4',
-              '-10^9 <= nums[i] <= 10^9',
-              '-10^9 <= target <= 10^9'
-            ],
-            starterCode: {
-              [language]: 'function twoSum(nums, target) {\n    // Your code here\n}'
-            },
-            technology: 'JavaScript'
-          }
-        ];
+        // API failed; do not use mock data, show empty state instead
       }
 
       setProblems(finalProblems);
-      
-      // Initialize solutions with starter code
+
+      // Initialize solutions with starter code (fallback to Hello World if missing)
       const storageKey = `coding_solutions_${language}`;
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        setSolutions(JSON.parse(saved));
+        // Use saved but ensure empty/missing entries get Hello World fallback
+        const savedObj = JSON.parse(saved);
+        const filled = { ...savedObj };
+        (finalProblems || []).forEach((problem) => {
+          const cur = savedObj[problem.id];
+          if (!cur || String(cur).trim().length === 0) {
+            let starter = '';
+            if (language === 'python') {
+              starter = `# Hello World (Python)\nprint(\"Hello, World!\")\n`;
+            } else if (language === 'java') {
+              starter = `// Hello World (Java)\npublic class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, World!\");\n  }\n}\n`;
+            } else if (language === 'cpp') {
+              starter = `// Hello World (C++)\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n  cout << \"Hello, World!\";\n  return 0;\n}\n`;
+            } else if (language === 'c') {
+              starter = `// Hello World (C)\n#include <stdio.h>\nint main(){\n  printf(\"Hello, World!\");\n  return 0;\n}\n`;
+            }
+            filled[problem.id] = starter;
+          }
+        });
+        setSolutions(filled);
+        localStorage.setItem(storageKey, JSON.stringify(filled));
       } else {
         const initialSolutions = {};
-        (finalProblems || []).forEach(problem => {
-          const starter = problem?.starterCode?.[language] ?? '';
+        (finalProblems || []).forEach((problem) => {
+          let starter = problem?.starterCode?.[language] ?? '';
+          if (!starter) {
+            if (language === 'python') {
+              starter = `# Hello World (Python)\nprint(\"Hello, World!\")\n`;
+            } else if (language === 'java') {
+              starter = `// Hello World (Java)\npublic class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, World!\");\n  }\n}\n`;
+            } else if (language === 'cpp') {
+              starter = `// Hello World (C++)\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n  cout << \"Hello, World!\";\n  return 0;\n}\n`;
+            } else if (language === 'c') {
+              starter = `// Hello World (C)\n#include <stdio.h>\nint main(){\n  printf(\"Hello, World!\");\n  return 0;\n}\n`;
+            }
+          }
           initialSolutions[problem.id] = starter;
         });
         setSolutions(initialSolutions);
         localStorage.setItem(storageKey, JSON.stringify(initialSolutions));
       }
-      
     } catch (error) {
       console.error('Failed to load problems:', error);
+      setProblems([]);
     }
     setLoading(false);
   };
@@ -164,7 +378,7 @@ export default function Coding() {
   const handleCodeChange = (problemId, code) => {
     const updated = {
       ...solutions,
-      [problemId]: code
+      [problemId]: code,
     };
     setSolutions(updated);
     const storageKey = `coding_solutions_${language}`;
@@ -177,12 +391,44 @@ export default function Coding() {
     const storageKey = `coding_solutions_${newLanguage}`;
     const saved = localStorage.getItem(storageKey);
     if (saved) {
-      setSolutions(JSON.parse(saved));
+      // Ensure Hello World fallback for empty/missing entries
+      const savedObj = JSON.parse(saved);
+      const updatedSolutions = { ...savedObj };
+      problems.forEach((problem) => {
+        const cur = savedObj[problem.id];
+        if (!cur || String(cur).trim().length === 0) {
+          let starter = '';
+          if (newLanguage === 'python') {
+            starter = `# Hello World (Python)\nprint(\"Hello, World!\")\n`;
+          } else if (newLanguage === 'java') {
+            starter = `// Hello World (Java)\npublic class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, World!\");\n  }\n}\n`;
+          } else if (newLanguage === 'cpp') {
+            starter = `// Hello World (C++)\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n  cout << \"Hello, World!\";\n  return 0;\n}\n`;
+          } else if (newLanguage === 'c') {
+            starter = `// Hello World (C)\n#include <stdio.h>\nint main(){\n  printf(\"Hello, World!\");\n  return 0;\n}\n`;
+          }
+          updatedSolutions[problem.id] = starter;
+        }
+      });
+      setSolutions(updatedSolutions);
+      localStorage.setItem(storageKey, JSON.stringify(updatedSolutions));
       return;
     }
     const updatedSolutions = {};
-    problems.forEach(problem => {
-      updatedSolutions[problem.id] = problem?.starterCode?.[newLanguage] ?? '';
+    problems.forEach((problem) => {
+      let starter = problem?.starterCode?.[newLanguage] ?? '';
+      if (!starter) {
+        if (newLanguage === 'python') {
+          starter = `# Hello World (Python)\nprint(\"Hello, World!\")\n`;
+        } else if (newLanguage === 'java') {
+          starter = `// Hello World (Java)\npublic class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, World!\");\n  }\n}\n`;
+        } else if (newLanguage === 'cpp') {
+          starter = `// Hello World (C++)\n#include <bits/stdc++.h>\nusing namespace std;\nint main(){\n  cout << \"Hello, World!\";\n  return 0;\n}\n`;
+        } else if (newLanguage === 'c') {
+          starter = `// Hello World (C)\n#include <stdio.h>\nint main(){\n  printf(\"Hello, World!\");\n  return 0;\n}\n`;
+        }
+      }
+      updatedSolutions[problem.id] = starter;
     });
     setSolutions(updatedSolutions);
     localStorage.setItem(storageKey, JSON.stringify(updatedSolutions));
@@ -201,23 +447,51 @@ export default function Coding() {
   };
 
   const enterFullscreen = () => {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen();
-    } else if (elem.webkitRequestFullscreen) {
-      elem.webkitRequestFullscreen();
-    } else if (elem.msRequestFullscreen) {
-      elem.msRequestFullscreen();
-    }
-    
-    // Hide dashboard elements
+    // Hide dashboard layout and show only test content
+    const dashboardLayout = document.querySelector('.dashboard-layout');
     const sidebar = document.querySelector('.sidebar');
-    const header = document.querySelector('.header');
+    const header = document.querySelector('.dashboard-header');
+    if (dashboardLayout) dashboardLayout.style.display = 'none';
     if (sidebar) sidebar.style.display = 'none';
     if (header) header.style.display = 'none';
+
+    // Make test container full screen
+    const testContainer = document.querySelector('.mcq-test-fullscreen');
+    if (testContainer) {
+      testContainer.style.position = 'fixed';
+      testContainer.style.top = '0';
+      testContainer.style.left = '0';
+      testContainer.style.width = '100vw';
+      testContainer.style.height = '100vh';
+      testContainer.style.zIndex = '9999';
+      testContainer.style.background = '';
+    }
+
+    // Skip calling browser fullscreen API automatically to avoid user-gesture errors
   };
 
   const exitFullscreen = () => {
+    // Restore dashboard layout
+    const dashboardLayout = document.querySelector('.dashboard-layout');
+    const sidebar = document.querySelector('.sidebar');
+    const header = document.querySelector('.dashboard-header');
+    if (dashboardLayout) dashboardLayout.style.display = '';
+    if (sidebar) sidebar.style.display = '';
+    if (header) header.style.display = '';
+
+    // Reset test container styles
+    const testContainer = document.querySelector('.mcq-test-fullscreen');
+    if (testContainer) {
+      testContainer.style.position = '';
+      testContainer.style.top = '';
+      testContainer.style.left = '';
+      testContainer.style.width = '';
+      testContainer.style.height = '';
+      testContainer.style.zIndex = '';
+      testContainer.style.background = '';
+    }
+
+    // Exit browser fullscreen
     if (document.exitFullscreen) {
       document.exitFullscreen();
     } else if (document.webkitExitFullscreen) {
@@ -225,26 +499,20 @@ export default function Coding() {
     } else if (document.msExitFullscreen) {
       document.msExitFullscreen();
     }
-    
-    // Show dashboard elements
-    const sidebar = document.querySelector('.sidebar');
-    const header = document.querySelector('.header');
-    if (sidebar) sidebar.style.display = 'block';
-    if (header) header.style.display = 'block';
   };
 
   const disableSecurityFeatures = () => {
     // Disable right-click
     document.addEventListener('contextmenu', preventAction);
-    
+
     // Disable keyboard shortcuts
     document.addEventListener('keydown', handleKeyDown);
-    
+
     // Disable copy/paste
     document.addEventListener('copy', preventAction);
     document.addEventListener('paste', preventAction);
     document.addEventListener('cut', preventAction);
-    
+
     // Disable text selection
     document.body.style.userSelect = 'none';
     document.body.style.webkitUserSelect = 'none';
@@ -256,7 +524,7 @@ export default function Coding() {
     document.removeEventListener('copy', preventAction);
     document.removeEventListener('paste', preventAction);
     document.removeEventListener('cut', preventAction);
-    
+
     document.body.style.userSelect = 'auto';
     document.body.style.webkitUserSelect = 'auto';
   };
@@ -285,49 +553,13 @@ export default function Coding() {
   const startExam = async () => {
     setShowTerms(false);
     setExamStarted(true);
-    
-    // Request webcam permission
-    await requestWebcamPermission();
-  };
-
-  const requestWebcamPermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: false 
-      });
-      setWebcamStream(stream);
-      setWebcamPermission('granted');
-      
-      // Create video element for webcam preview in header
-      setTimeout(() => {
-        const videoElement = document.getElementById('webcam-preview-coding');
-        if (videoElement && stream) {
-          videoElement.srcObject = stream;
-          videoElement.play();
-        }
-      }, 100);
-      
-    } catch (error) {
-      console.error('Webcam permission denied:', error);
-      setWebcamPermission('denied');
-      alert('⚠️ Webcam access denied. The test will continue but may be monitored through other means.');
-    }
-  };
-
-  const stopWebcam = () => {
-    if (webcamStream) {
-      webcamStream.getTracks().forEach(track => track.stop());
-      setWebcamStream(null);
-      setWebcamPermission('pending');
-    }
   };
 
   const getProblemStatus = () => {
     return problems.map((_, index) => ({
       problemNumber: index + 1,
       attempted: solutions[problems[index]?.id] && solutions[problems[index]?.id].trim().length > 0,
-      current: index === currentProblem
+      current: index === currentProblem,
     }));
   };
 
@@ -354,7 +586,7 @@ export default function Coding() {
           userAnswer: solutions[p.id] || '',
           correctAnswer: null,
           isCorrect: null,
-          technology: p.technology || 'General'
+          technology: p.technology || 'General',
         }));
 
         await axios.post(
@@ -367,7 +599,7 @@ export default function Coding() {
             totalQuestions,
             timeSpent: minutesSpent,
             questions: questionsPayload,
-            feedback: ''
+            feedback: '',
           },
           { headers: token ? { Authorization: `Bearer ${token}` } : {} }
         );
@@ -378,17 +610,17 @@ export default function Coding() {
       console.error('Failed to submit test:', error);
     }
     setLoading(false);
-    
+
     // Show success popup
     setShowSuccessPopup(true);
-    
-    // Auto-close popup and exit fullscreen after 3 seconds
+
+    // Auto-close popup, exit fullscreen and redirect after 2 seconds
     setTimeout(() => {
       setShowSuccessPopup(false);
       exitFullscreen();
       setExamStarted(false);
-      stopWebcam(); // Stop webcam when exam ends
-    }, 3000);
+      navigate('/candidate/partices');
+    }, 2000);
   };
 
   const formatTime = (seconds) => {
@@ -397,12 +629,22 @@ export default function Coding() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getRating = (percentage) => {
+    if (percentage >= 70) return 'Good';
+    if (percentage >= 40) return 'Average';
+    return 'Poor';
+  };
+
   const getDifficultyColor = (difficulty) => {
     switch (difficulty.toLowerCase()) {
-      case 'easy': return '#22c55e';
-      case 'medium': return '#f59e0b';
-      case 'hard': return '#ef4444';
-      default: return '#6b7280';
+      case 'easy':
+        return '#22c55e';
+      case 'medium':
+        return '#f59e0b';
+      case 'hard':
+        return '#ef4444';
+      default:
+        return '#6b7280';
     }
   };
 
@@ -417,147 +659,60 @@ export default function Coding() {
     );
   }
 
-  if (isSubmitted) {
+  // After submit, do not switch to a separate result page; keep rendering the test UI
+
+  const currentProb = problems[currentProblem];
+
+  // Empty state when no problems are available and not loading
+  if (!loading && problems.length === 0) {
     return (
-      <div className="coding-container">
-        <div className="result-state">
-          <div className="result-card">
-            <h2>🎉 Test Completed!</h2>
-            <div className="score-display">
-              <span className="score-number">{score}</span>
-              <span className="score-total">/ {problems.length}</span>
-            </div>
-            <p>Problems solved successfully</p>
-            <div className="result-details">
-              <div className="detail-item">
-                <span className="detail-label">Time Taken:</span>
-                <span className="detail-value">{formatTime(3600 - timeLeft)}</span>
-              </div>
-              <div className="detail-item">
-                <span className="detail-label">Language Used:</span>
-                <span className="detail-value">{language.charAt(0).toUpperCase() + language.slice(1)}</span>
-              </div>
-            </div>
-          </div>
+      <div className="coding-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <div style={{ background: '#0b1220', border: '1px solid #1f2937', color: '#e5e7eb', padding: 20, borderRadius: 12, textAlign: 'center' }}>
+          <h3 style={{ margin: 0, marginBottom: 8 }}>No coding problems available</h3>
+          <div style={{ color: '#9ca3af' }}>Please try again later or adjust your settings.</div>
         </div>
       </div>
     );
   }
 
-  const currentProb = problems[currentProblem];
-
   return (
-    <div className={`coding-container ${examStarted ? 'exam-mode' : ''}`}>
-      {/* Terms and Conditions Modal */}
-      {showTerms && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 10000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '12px',
-            maxWidth: '600px',
-            maxHeight: '80vh',
-            overflow: 'auto',
-            margin: '20px'
-          }}>
-            <h2 style={{ color: '#1f2937', marginBottom: '20px', textAlign: 'center' }}>
-              📝 Coding Test - Terms & Conditions
-            </h2>
-            <div style={{ color: '#374151', lineHeight: '1.6', marginBottom: '25px' }}>
-              <p><strong>⚠️ Important Exam Rules:</strong></p>
-              <ul style={{ marginLeft: '20px', marginTop: '10px' }}>
-                <li>• This test will run in <strong>full-screen mode</strong></li>
-                <li>• <strong>Copy, paste, and text selection</strong> are disabled</li>
-                <li>• <strong>Right-click and keyboard shortcuts</strong> are blocked</li>
-                <li>• <strong>Developer tools</strong> (F12) are disabled</li>
-                <li>• You have <strong>60 minutes</strong> to complete all problems</li>
-                <li>• Your webcam may be monitored during the test</li>
-                <li>• Switching tabs or applications is not allowed</li>
-                <li>• The test will auto-submit when time expires</li>
-              </ul>
-              <p style={{ marginTop: '15px' }}>
-                <strong>📋 Test Instructions:</strong>
-              </p>
-              <ul style={{ marginLeft: '20px', marginTop: '10px' }}>
-                <li>• Solve coding problems in your preferred language</li>
-                <li>• Navigate between problems using the buttons</li>
-                <li>• Your solutions are auto-saved as you type</li>
-                <li>• Submit when you're ready or when time runs out</li>
-              </ul>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <button
-                onClick={startExam}
-                style={{
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  padding: '12px 30px',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#2563eb'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#3b82f6'}
-              >
-                🚀 I Agree - Start Coding Test
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className={`coding-container ${examStarted ? 'exam-mode mcq-test-fullscreen' : ''}`}>
+      {/* Terms modal removed; coding test starts immediately */}
 
-      {/* Success Popup */}
+      {/* Success Toast (non-blocking) */}
       {showSuccessPopup && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 10000,
-          animation: 'fadeIn 0.3s ease'
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '40px',
-            borderRadius: '16px',
-            textAlign: 'center',
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)',
-            animation: 'fadeIn 0.3s ease'
-          }}>
-            <div style={{ fontSize: '48px', marginBottom: '20px' }}>🎉</div>
-            <h2 style={{ color: '#059669', marginBottom: '15px' }}>Test Submitted Successfully!</h2>
-            <p style={{ color: '#6b7280', marginBottom: '20px' }}>
-              Your coding solutions have been submitted.<br />
-              Exiting full-screen mode...
-            </p>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              border: '3px solid #d1fae5',
-              borderTop: '3px solid #059669',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto'
-            }}></div>
+        <div
+          style={{
+            position: 'fixed',
+            left: '50%',
+            bottom: 20,
+            transform: 'translateX(-50%)',
+            zIndex: 10000,
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              background: '#111827',
+              padding: '12px 16px',
+              borderRadius: 10,
+              color: '#e5e7eb',
+              minWidth: 280,
+              maxWidth: 420,
+              boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
+              border: '1px solid #1f2937',
+              textAlign: 'center',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div style={{ fontSize: 18, marginBottom: 4 }}>🎉 Submitted successfully</div>
+            <div style={{ fontSize: 12, color: '#9ca3af' }}>Redirecting to Practice…</div>
+            <div style={{ color: '#10b981', marginTop: 6, fontWeight: 700 }}>
+              Score: {score}/{problems.length}
+            </div>
+            <div style={{ color: '#93c5fd', marginTop: 2, fontWeight: 700 }}>
+              Rating: {getRating(problems.length ? Math.round((score / problems.length) * 100) : 0)}
+            </div>
           </div>
         </div>
       )}
@@ -569,234 +724,97 @@ export default function Coding() {
             position: 'fixed',
             top: 0,
             left: 0,
-            width: '100%',
-            background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #06b6d4 100%)',
-            color: 'white',
-            padding: '15px 25px',
+            right: 0,
+            background: '#111827',
+            borderBottom: '1px solid #1f2937',
+            color: '#e5e7eb',
+            padding: '12px 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            zIndex: 1000
+            zIndex: 4000,
           }}
         >
-          {/* Left: branding */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '10px',
-              fontWeight: '600',
-              textAlign: 'center',
-              color: 'rgba(255, 255, 255, 0.8)'
-            }}
-          >
-            <img src={logo} alt="Logo" style={{ height: '28px', marginRight: '8px' }} />
-            <span style={{ fontSize: '10px' }}>RECRUITER</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={logo} alt="Logo" style={{ width: 22, height: 22, objectFit: 'contain' }} />
+            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Coding Practice Test</h1>
+            <span style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 6, background: '#0f172a', border: '1px solid #1f2937', color: '#93c5fd', fontSize: 11, fontWeight: 700 }}>Secure</span>
           </div>
-
-          {/* Center: timer */}
-          <div
-            style={{
-              textAlign: 'center',
-              fontSize: '24px',
-              fontWeight: '700',
-              animation: timeLeft <= 300 ? 'pulse 2s infinite' : 'none',
-              color: timeLeft <= 300 ? '#fbbf24' : 'white'
-            }}
-          >
-            ⏱️ {formatTime(timeLeft)}
-          </div>
-
-          {/* Right: secure mode, webcam, status */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div
-              style={{
-                padding: '8px 12px',
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '600'
-              }}
-            >
-              🔒 SECURE MODE
+          {timerEnabled ? (
+            <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
+              ⏱️ {formatTime(timeLeft)}
             </div>
-            <div
-              style={{
-                width: '100px',
-                height: '70px',
-                backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                borderRadius: '8px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid rgba(255, 255, 255, 0.3)',
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-            >
-              {webcamPermission === 'granted' && webcamStream ? (
-                <video
-                  id="webcam-preview-coding"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    borderRadius: '6px'
-                  }}
-                  autoPlay
-                  muted
-                  playsInline
-                />
-              ) : (
-                <>
-                  <div
-                    style={{
-                      fontSize: '20px',
-                      animation:
-                        webcamPermission === 'granted' ? 'blink 1s infinite' : 'none',
-                      color:
-                        webcamPermission === 'granted'
-                          ? '#10b981'
-                          : webcamPermission === 'denied'
-                          ? '#ef4444'
-                          : '#fbbf24'
-                    }}
-                  >
-                    📹
-                  </div>
-                  <div style={{ fontSize: '10px', marginTop: '2px' }}>
-                    {webcamPermission === 'granted'
-                      ? 'LOADING'
-                      : webcamPermission === 'denied'
-                      ? 'DENIED'
-                      : 'WEBCAM'}
-                  </div>
-                </>
-              )}
-              {webcamPermission === 'granted' && (
+          ) : (
+            <div style={{ color: '#9ca3af', fontWeight: 600 }}>No time limit</div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }} />
+        </div>
+      )}
+
+      {/* MCQ-style Question Status: toggle handle, overlay, sidebar */}
+      {examStarted && (
+        <>
+          <div
+            className={`qs-toggle ${showQuestionStatus ? 'open' : ''}`}
+            onClick={() => setShowQuestionStatus(!showQuestionStatus)}
+            title="Question Status"
+          >
+            <span style={{ fontSize: '18px' }}>{showQuestionStatus ? '❯' : '❮'}</span>
+          </div>
+          <div
+            className={`qs-overlay ${showQuestionStatus ? 'open' : ''}`}
+            onClick={() => setShowQuestionStatus(false)}
+          />
+          <div className={`qs-sidebar ${showQuestionStatus ? 'open' : ''}`}>
+            <div className="qs-grid">
+              {getProblemStatus().map((status, index) => (
                 <div
+                  key={index}
+                  className="qs-item"
                   style={{
-                    position: 'absolute',
-                    bottom: '2px',
-                    right: '2px',
-                    width: '8px',
-                    height: '8px',
-                    backgroundColor: '#10b981',
-                    borderRadius: '50%',
-                    animation: 'blink 1s infinite'
+                    backgroundColor: status.current
+                      ? '#3b82f6'
+                      : status.attempted
+                      ? '#10b981'
+                      : 'rgba(255,255,255,0.15)'
                   }}
-                ></div>
-              )}
+                  onClick={() => setCurrentProblem(index)}
+                >
+                  {status.problemNumber}
+                </div>
+              ))}
             </div>
-            <button
-              onClick={() => setShowQuestionStatus(!showQuestionStatus)}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                border: 'none',
-                borderRadius: '6px',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: '600',
-                cursor: 'pointer'
-              }}
-            >
-              📊 P-Status
-            </button>
+            <div className="qs-legend">
+              <div>🔵 Current Problem</div>
+              <div>🟢 Code Written</div>
+              <div>⚪ Not Attempted</div>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
-      {/* Problem Status Panel */}
-      {showQuestionStatus && examStarted && (
-        <div style={{
-          position: 'fixed',
-          top: '100px',
-          right: '20px',
-          width: '250px',
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
-          color: 'white',
-          borderRadius: '12px',
-          padding: '15px',
-          zIndex: 1001,
-          maxHeight: '400px',
-          overflowY: 'auto'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            marginBottom: '15px'
-          }}>
-            <h3 style={{ margin: 0, fontSize: '16px' }}>Problem Status</h3>
-            <button
-              onClick={() => setShowQuestionStatus(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'white',
-                fontSize: '18px',
-                cursor: 'pointer'
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-            {getProblemStatus().map((status, index) => (
-              <div
-                key={index}
-                style={{
-                  width: '45px',
-                  height: '35px',
-                  borderRadius: '6px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  backgroundColor: status.current 
-                    ? '#3b82f6' 
-                    : status.attempted 
-                    ? '#10b981' 
-                    : 'rgba(255, 255, 255, 0.2)',
-                  color: 'white',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setCurrentProblem(index)}
-              >
-                P{status.problemNumber}
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: '15px', fontSize: '12px', opacity: 0.8 }}>
-            <div>🔵 Current Problem</div>
-            <div>🟢 Code Written</div>
-            <div>⚪ Not Attempted</div>
-          </div>
-        </div>
-      )}
-
-      <div className="coding-test" style={{
-        marginTop: examStarted ? '100px' : '0',
-        padding: examStarted ? '20px' : '20px'
-      }}>
+      <div
+        className="coding-test"
+        style={{
+          marginTop: examStarted ? '56px' : '0',
+          padding: examStarted ? '16px' : '20px',
+        }}
+      >
         {/* Header - Only show if not in exam mode */}
         {!examStarted && (
           <div className="coding-header">
             <div className="header-left">
               <h1 className="header-title">Coding Practice Test</h1>
               <div className="language-selector">
-                <select 
-                  value={language} 
+                <select
+                  value={language}
                   onChange={(e) => handleLanguageChange(e.target.value)}
                   className="language-select"
                 >
-                  <option value="javascript">JavaScript</option>
-                  <option value="python">Python</option>
                   <option value="java">Java</option>
+                  <option value="python">Python</option>
+                  <option value="cpp">C++</option>
+                  <option value="c">C</option>
                 </select>
               </div>
             </div>
@@ -808,12 +826,16 @@ export default function Coding() {
         <div className="progress-section">
           <div className="progress-info">
             <span>Problem {currentProblem + 1} of {problems.length}</span>
-            <span>{Math.round(((currentProblem + 1) / problems.length) * 100)}% Complete</span>
+            <span>
+              {Math.round(((currentProblem + 1) / problems.length) * 100)}% Complete
+            </span>
           </div>
           <div className="progress-bar">
-            <div 
+            <div
               className="progress-fill"
-              style={{ width: `${((currentProblem + 1) / problems.length) * 100}%` }}
+              style={{
+                width: `${((currentProblem + 1) / problems.length) * 100}%`,
+              }}
             ></div>
           </div>
         </div>
@@ -821,19 +843,21 @@ export default function Coding() {
         {/* Main Content */}
         <div className="coding-content">
           {problems.length > 0 ? (
-            <div className="problem-layout">
+            <div className="problem-layout" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Problem Description */}
               <div className="problem-panel">
                 <div className="problem-header">
                   <h3 className="problem-title">{currentProb?.title}</h3>
-                  <span 
+                  <span
                     className="difficulty-badge"
-                    style={{ backgroundColor: getDifficultyColor(currentProb?.difficulty) }}
+                    style={{
+                      backgroundColor: getDifficultyColor(currentProb?.difficulty),
+                    }}
                   >
                     {currentProb?.difficulty}
                   </span>
                 </div>
-                
+
                 <div className="problem-description">
                   <p>{currentProb?.description}</p>
                 </div>
@@ -843,10 +867,16 @@ export default function Coding() {
                   <h4>Examples:</h4>
                   {currentProb?.examples?.map((example, index) => (
                     <div key={index} className="example-block">
-                      <div><strong>Input:</strong> {example.input}</div>
-                      <div><strong>Output:</strong> {example.output}</div>
+                      <div>
+                        <strong>Input:</strong> {example.input}
+                      </div>
+                      <div>
+                        <strong>Output:</strong> {example.output}
+                      </div>
                       {example.explanation && (
-                        <div><strong>Explanation:</strong> {example.explanation}</div>
+                        <div>
+                          <strong>Explanation:</strong> {example.explanation}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -865,16 +895,73 @@ export default function Coding() {
 
               {/* Code Editor */}
               <div className="editor-panel">
-                <div className="editor-header">
-                  <span>Code Editor ({language})</span>
+                <div className="editor-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>Code Editor</span>
+                    <select
+                      value={language}
+                      onChange={(e) => handleLanguageChange(e.target.value)}
+                      className="language-select"
+                      style={{ padding: '6px 8px', background: '#0f172a', color: '#e5e7eb', border: '1px solid #1f2937', borderRadius: 6 }}
+                    >
+                      <option value="java">Java</option>
+                      <option value="python">Python</option>
+                      <option value="cpp">C++</option>
+                      <option value="c">C</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {!isRunning ? (
+                      <>
+                        <button onClick={handleRun} className="btn-secondary">Run</button>
+                        <button onClick={handleRunTests} className="btn-primary">Run Tests</button>
+                      </>
+                    ) : (
+                      <button onClick={handleCancel} className="btn-secondary">Cancel</button>
+                    )}
+                    <button onClick={handleSubmit} disabled={loading} className="btn-submit">{loading ? 'Submitting…' : 'Submit Test'}</button>
+                  </div>
                 </div>
-                <textarea
-                  className="code-editor"
-                  value={solutions[currentProb?.id] || ''}
-                  onChange={(e) => handleCodeChange(currentProb?.id, e.target.value)}
-                  placeholder="Write your solution here..."
-                  spellCheck={false}
-                />
+                <div className="editor-body">
+                  <textarea
+                    className="code-editor"
+                    value={solutions[currentProb?.id] || ''}
+                    onChange={(e) => handleCodeChange(currentProb?.id, e.target.value)}
+                    placeholder={'Write your solution here...'}
+                    spellCheck={false}
+                  />
+                  <div className="editor-output">
+                    <div className="editor-output-title">Console</div>
+                    <pre className="editor-output-pre">{runOutput || '—'}</pre>
+                    <div className="editor-output-title" style={{ marginTop: 12 }}>Test Results</div>
+                    {testResults ? (
+                      testResults.supported === false ? (
+                        <div>Only JavaScript tests are supported in browser.</div>
+                      ) : testResults.total === 0 ? (
+                        <div>No structured examples found to run as tests.</div>
+                      ) : (
+                        <div>
+                          <div style={{ marginBottom: 6 }}>Passed {testResults.passed} / {testResults.total}</div>
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            {testResults.cases.map((c) => (
+                              <div key={c.idx} style={{ background: c.pass && !c.error ? '#052e1a' : '#3f1d1f', border: '1px solid #1f2937', borderRadius: 6, padding: 8 }}>
+                                <div style={{ fontWeight: 600 }}>Case {c.idx}: {c.pass && !c.error ? 'PASS' : 'FAIL'}</div>
+                                {c.error ? <div>Error: {c.error}</div> : (
+                                  <>
+                                    <div>Expected: {c.expected}</div>
+                                    <div>Got: {typeof c.got === 'object' ? JSON.stringify(c.got) : String(c.got)}</div>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <div>—</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -884,8 +971,8 @@ export default function Coding() {
           )}
         </div>
 
-        {/* Navigation */}
-        {problems.length > 0 && (
+        {/* Navigation (hidden in exam mode; floating buttons are shown there) */}
+        {problems.length > 0 && !examStarted && (
           <div className="coding-navigation">
             <button
               onClick={handlePrevious}
@@ -894,32 +981,64 @@ export default function Coding() {
             >
               ← Previous
             </button>
-            
+
             <div className="nav-center">
               <span className="problem-indicator">
                 Problem {currentProblem + 1} of {problems.length}
               </span>
             </div>
-            
-            {currentProblem < problems.length - 1 ? (
-              <button
-                onClick={handleNext}
-                className="btn-primary"
-              >
-                Next →
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="btn-submit"
-              >
-                {loading ? 'Submitting...' : 'Submit Test'}
-              </button>
-            )}
+
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="btn-submit"
+            >
+              {loading ? 'Submitting…' : 'Submit Test'}
+            </button>
           </div>
         )}
       </div>
+
+      {/* Floating bottom-right navigation (match MCQ) */}
+      {problems.length > 0 && examStarted && (
+        <div
+          style={{
+            position: 'fixed',
+            right: 20,
+            bottom: 20,
+            display: 'flex',
+            gap: 8,
+            zIndex: 2100,
+          }}
+        >
+          <button
+            onClick={handlePrevious}
+            disabled={currentProblem === 0}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 6,
+              background: '#111827',
+              color: '#e5e7eb',
+              border: '1px solid #374151',
+              opacity: currentProblem === 0 ? 0.6 : 1,
+              fontSize: 12,
+            }}
+            title="Previous"
+          >
+            Prev
+          </button>
+          {/* Next button removed to streamline navigation */}
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="btn-submit"
+              style={{ fontSize: 12 }}
+              title="Submit"
+            >
+              {loading ? 'Submitting…' : 'Submit'}
+            </button>
+        </div>
+      )}
     </div>
   );
 }

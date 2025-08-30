@@ -25,7 +25,7 @@ export default function EditProfile() {
       try {
         setError('');
         const token = localStorage.getItem('token');
-        const res = await axios.get('http://localhost:5000/api/recruiter/profile', {
+        const res = await axios.get('http://localhost:8080/api/user/profile', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setForm(res.data);
@@ -47,7 +47,7 @@ export default function EditProfile() {
       const token = localStorage.getItem('token');
       const data = new FormData();
       data.append('image', file);
-      const res = await axios.patch('http://localhost:5000/api/user/profile-photo', data, {
+      const res = await axios.patch('http://localhost:8080/api/user/profile-photo', data, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
       });
       setForm(f => ({ ...f, image: res.data.image }));
@@ -67,10 +67,9 @@ export default function EditProfile() {
     setSuccess(false);
     try {
       const token = localStorage.getItem('token');
-      const formData = new FormData();
-      Object.entries(form).forEach(([k, v]) => formData.append(k, v));
-      const res = await axios.put('http://localhost:5000/api/recruiter/profile', formData, {
-        headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
+      const payload = { ...form };
+      const res = await axios.put('http://localhost:8080/api/user/profile', payload, {
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
       });
       setSuccess(true);
       setForm(res.data);

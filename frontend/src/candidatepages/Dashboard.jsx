@@ -21,15 +21,17 @@ export default function CandidateDashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Fetch unread messages count
+  // Fetch unread messages count (dynamic from /chat/chats)
   useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/chat/unread-count', {
+        const res = await axios.get('/api/chat/chats', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setUnreadCount(res.data.totalUnreadCount || 0);
+        const list = Array.isArray(res.data) ? res.data : [];
+        const total = list.reduce((sum, c) => sum + (Number(c.unreadCount) || 0), 0);
+        setUnreadCount(total);
       } catch (err) {
         console.error('Failed to fetch unread count:', err);
         setUnreadCount(0);
@@ -38,8 +40,6 @@ export default function CandidateDashboard() {
     };
 
     fetchUnreadCount();
-    
-    // Refresh every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
   }, []);

@@ -41,6 +41,18 @@ const DynamicChat = () => {
   // Get auth token
   const getToken = () => localStorage.getItem('token');
 
+  // Get current user id from JWT (as string for stable comparisons)
+  const getCurrentUserId = () => {
+    try {
+      const token = getToken();
+      if (!token) return null;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return String(payload.id);
+    } catch (e) {
+      return null;
+    }
+  };
+
   // API calls
   const api = axios.create({
     baseURL: '/api/chat',
@@ -67,7 +79,7 @@ const DynamicChat = () => {
   const refreshUnreadCounts = async () => {
     try {
       const response = await api.get('/chats');
-      setChats(response.data);
+      setChats(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Failed to refresh unread counts:', error);
     }
@@ -91,7 +103,7 @@ const DynamicChat = () => {
   const loadChats = async () => {
     try {
       const response = await api.get('/chats');
-      setChats(response.data);
+      setChats(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Failed to load chats:', error);
     }
@@ -102,10 +114,14 @@ const DynamicChat = () => {
     try {
       setLoading(true);
       const response = await api.get(`/messages/${chatId}`);
-      setMessages(response.data);
+      setMessages(Array.isArray(response.data) ? response.data : []);
       
       // Mark messages as read
       await api.post('/mark-read', { chatId });
+      // Optimistically zero unread for this chat in sidebar
+      setChats(prev => prev.map(c => c._id === String(chatId) ? { ...c, unreadCount: 0 } : c));
+      // Sync with backend (ensures sidebar reflects latest counts)
+      refreshUnreadCounts();
     } catch (error) {
       console.error('Failed to load messages:', error);
     } finally {
@@ -369,7 +385,7 @@ const DynamicChat = () => {
       return chat.chatName || 'Group Chat';
     }
     
-    const otherParticipant = chat.participants.find(p => p._id !== currentUserId);
+    const otherParticipant = chat.participants.find(p => String(p._id) !== String(currentUserId));
     return otherParticipant?.firstName 
       ? `${otherParticipant.firstName} ${otherParticipant.lastName || ''}`.trim()
       : otherParticipant?.name || otherParticipant?.email || 'Unknown User';
@@ -387,13 +403,14 @@ const DynamicChat = () => {
 
   return (
     <div className="chat-container">
-      <style jsx>{`
+      <style>{`
         .chat-container {
           display: flex;
-          height: 90vh;
+          height: 100vh;
+          height: 100dvh; /* better mobile viewport */
           width: 100%;
           margin: 0;
-          background: white;
+          background: #0b1220;
           border-radius: 0;
           box-shadow: none;
           overflow: hidden;
@@ -401,8 +418,8 @@ const DynamicChat = () => {
 
         .chat-sidebar {
           width: ${isMobile ? '100%' : '350px'};
-          background: #f8f9fa;
-          border-right: 1px solid #e9ecef;
+          background: #0f1629;
+          border-right: 1px solid #26314f;
           display: ${isMobile && !showChatList ? 'none' : 'flex'};
           flex-direction: column;
         }
@@ -411,17 +428,19 @@ const DynamicChat = () => {
           flex: 1;
           display: ${isMobile && showChatList ? 'none' : 'flex'};
           flex-direction: column;
+          overflow: hidden; /* keep header/input static; only messages scroll */
+          min-height: 0; /* enable child flex item to shrink and scroll */
         }
 
         .sidebar-header {
           padding: 20px;
-          border-bottom: 1px solid #e9ecef;
-          background: white;
+          border-bottom: 1px solid #26314f;
+          background: #0b1220;
         }
 
         .sidebar-title {
           display: flex;
-          justify-content: between;
+          justify-content: space-between;
           align-items: center;
           margin-bottom: 15px;
         }
@@ -434,10 +453,12 @@ const DynamicChat = () => {
         .search-input {
           width: 100%;
           padding: 10px 40px 10px 15px;
-          border: 1px solid #dee2e6;
+          border: 1px solid #26314f;
           border-radius: 25px;
           font-size: 14px;
           outline: none;
+          background: #0f1629;
+          color: #e2e8f0;
         }
 
         .search-icon {
@@ -445,26 +466,25 @@ const DynamicChat = () => {
           right: 15px;
           top: 50%;
           transform: translateY(-50%);
-          color: #6c757d;
+          color: #94a3b8;
         }
 
         .new-chat-btn {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 8px 16px;
-          background: #007bff;
+          padding: 8px 14px;
+          background: #1b4edb;
           color: white;
           border: none;
-          border-radius: 20px;
+          border-radius: 14px;
           cursor: pointer;
           font-size: 14px;
-          transition: background 0.2s;
+          transition: background 0.2s, opacity 0.2s;
+          box-shadow: none;
         }
 
-        .new-chat-btn:hover {
-          background: #0056b3;
-        }
+        .new-chat-btn:hover { background: #0f3fb1; }
 
         .chat-list {
           flex: 1;
@@ -473,7 +493,7 @@ const DynamicChat = () => {
 
         .chat-item {
           padding: 15px 20px;
-          border-bottom: 1px solid #f1f3f4;
+          border-bottom: 1px solid #1e2a4a;
           cursor: pointer;
           transition: background 0.2s;
           display: flex;
@@ -482,11 +502,11 @@ const DynamicChat = () => {
         }
 
         .chat-item:hover {
-          background: #f1f3f4;
+          background: #101a32;
         }
 
         .chat-item.active {
-          background: #e3f2fd;
+          background: #0e1a35;
           border-right: 3px solid #007bff;
         }
 
@@ -530,7 +550,7 @@ const DynamicChat = () => {
 
         .chat-preview {
           font-size: 13px;
-          color: #6c757d;
+          color: #94a3b8;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -538,7 +558,7 @@ const DynamicChat = () => {
 
         .chat-time {
           font-size: 12px;
-          color: #6c757d;
+          color: #94a3b8;
         }
 
         .unread-badge {
@@ -555,13 +575,16 @@ const DynamicChat = () => {
           position: absolute;
           top: -5px;
           right: -5px;
-          border: 2px solid white;
+          border: 2px solid #0f1629;
         }
 
         .chat-header {
-          padding: 20px;
-          border-bottom: 1px solid #e9ecef;
-          background: white;
+          position: sticky;
+          top: env(safe-area-inset-top, 0);
+          z-index: 10;
+          padding: 16px 18px;
+          border-bottom: 1px solid #26314f;
+          background: #0b1220;
           display: flex;
           align-items: center;
           gap: 15px;
@@ -572,15 +595,51 @@ const DynamicChat = () => {
           background: none;
           border: none;
           cursor: pointer;
-          padding: 5px;
+          padding: 6px;
           color: #6c757d;
         }
 
+        .icon-btn {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 6px;
+          border-radius: 8px;
+          color: #cbd5e1;
+          transition: background 0.2s, color 0.2s, transform 0.1s;
+          box-shadow: none;
+          outline: none;
+        }
+
+        .icon-btn:hover { background: #101a32; color: #e2e8f0; }
+        .icon-btn:active { transform: scale(0.98); }
+        .icon-btn:focus-visible { box-shadow: 0 0 0 2px rgba(27,78,219,0.35); }
+        .icon-btn.danger { color: #dc3545; border: 1px solid rgba(220,53,69,0.35); background: transparent; }
+        .icon-btn.danger:hover { background: rgba(220,53,69,0.08); color: #ff6b81; }
+
+        /* Header icon sizing for consistent look */
+        .header-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+        }
+
+        /* Smaller avatar in header on mobile */
+        @media (max-width: 768px) {
+          .chat-header { padding: 16px 18px; gap: 10px; }
+          .chat-header .chat-avatar { width: 36px; height: 36px; font-size: 14px; }
+        }
+
         .messages-container {
-          flex: 1;
+          flex: 1 1 auto;
+          min-height: 0; /* critical for proper scrolling inside flex */
           overflow-y: auto;
-          padding: 20px;
-          background: #f8f9fa;
+          padding: 26px 16px calc(120px + env(safe-area-inset-bottom));
+          background: #0f1629;
         }
 
         .message {
@@ -593,35 +652,35 @@ const DynamicChat = () => {
           justify-content: flex-end;
         }
 
-
-
         .message-content {
           max-width: 70%;
           position: relative;
         }
 
         .message-bubble {
-          padding: 12px 16px;
+          padding: 10px 14px;
           border-radius: 18px;
           position: relative;
           word-wrap: break-word;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
         }
 
         .message.own .message-bubble {
-          background: #007bff;
-          color: white;
+          background: #1b4edb;
+          color: #e2e8f0;
         }
 
         .message:not(.own) .message-bubble {
-          background: white;
-          color: #333;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          background: #101a32;
+          color: #e2e8f0;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          border: 1px solid #26314f;
         }
 
         .message-time {
-          font-size: 11px;
-          opacity: 0.7;
-          margin-top: 4px;
+          font-size: 10px;
+          opacity: 0.65;
+          margin-top: 3px;
           text-align: right;
         }
 
@@ -633,11 +692,11 @@ const DynamicChat = () => {
           position: absolute;
           top: -5px;
           right: -5px;
-          background: white;
-          border: 1px solid #dee2e6;
+          background: #0f1629;
+          border: 1px solid #26314f;
           border-radius: 15px;
           padding: 5px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          box-shadow: 0 2px 10px rgba(0,0,0,0.4);
           display: flex;
           gap: 5px;
           z-index: 10;
@@ -653,7 +712,7 @@ const DynamicChat = () => {
         }
 
         .option-btn:hover {
-          background: #f1f3f4;
+          background: #101a32;
         }
 
         .saved-indicator {
@@ -672,26 +731,30 @@ const DynamicChat = () => {
         }
 
         .message-input {
-          padding: 16px 20px;
-          border-top: 1px solid #e9ecef;
-          background: white;
-          box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+          position: sticky;
+          bottom: 0;
+          padding: 12px 16px;
+          padding-bottom: calc(16px + env(safe-area-inset-bottom));
+          border-top: 1px solid #26314f;
+          background: #0b1220;
+          box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.18);
+          z-index: 11;
         }
 
         .input-form {
           display: flex;
-          gap: 12px;
+          gap: 10px;
           align-items: center;
-          background: #f8f9fa;
-          border-radius: 25px;
+          background: #0f1629;
+          border-radius: 16px;
           padding: 8px 12px;
-          border: 1px solid #e9ecef;
+          border: 1px solid #26314f;
           transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         .input-form:focus-within {
-          border-color: #007bff;
-          box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+          border-color: #1b4edb;
+          box-shadow: 0 0 0 3px rgba(27, 78, 219, 0.2);
         }
 
         .text-input {
@@ -701,73 +764,72 @@ const DynamicChat = () => {
           background: transparent;
           outline: none;
           font-size: 14px;
-          color: #333;
+          color: #e2e8f0;
         }
 
         .text-input::placeholder {
-          color: #6c757d;
+          color: #94a3b8;
         }
 
         .send-btn {
-          background: #007bff;
+          background: #1b4edb;
           color: white;
           border: none;
           border-radius: 50%;
-          width: 45px;
-          height: 45px;
+          width: 44px;
+          height: 44px;
           display: flex;
           align-items: center;
           justify-content: center;
+          line-height: 0;
           cursor: pointer;
           transition: background 0.2s;
+          box-shadow: none;
         }
 
-        .send-btn:hover:not(:disabled) {
-          background: #0056b3;
-        }
+        /* Make sure the send icon stays visible */
+        .send-btn svg { color: inherit; width: 18px; height: 18px; flex-shrink: 0; display: block; }
+        .send-btn svg path { stroke: currentColor; stroke-width: 2.2; fill: none; }
 
-        .send-btn:disabled {
-          background: #6c757d;
-          cursor: not-allowed;
-        }
+        .send-btn:hover:not(:disabled) { background: #0f3fb1; }
+
+        .send-btn:disabled { background: #6c757d; color: #e2e8f0; cursor: not-allowed; }
+        .send-btn:disabled svg { color: inherit; opacity: 0.95; }
 
         .attachment-btn {
-          background: #007bff;
-          color: white;
-          border: none;
+          background: transparent;
+          color: #cbd5e1;
+          border: 1px solid #26314f;
           border-radius: 50%;
           width: 42px;
           height: 42px;
           display: flex;
           align-items: center;
           justify-content: center;
+          line-height: 0;
           cursor: pointer;
-          transition: all 0.2s;
-          box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
-        }
-
-        .attachment-btn:hover:not(:disabled) {
-          background: #0056b3;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
-        }
-
-        .attachment-btn:disabled {
-          background: #adb5bd;
-          cursor: not-allowed;
-          transform: none;
+          transition: background 0.2s, color 0.2s;
           box-shadow: none;
         }
+
+        /* Ensure the paperclip icon is visible */
+        .attachment-btn svg { color: inherit; width: 18px; height: 18px; flex-shrink: 0; display: block; }
+        .attachment-btn svg path { stroke: currentColor; stroke-width: 2.2; fill: none; }
+
+        .attachment-btn:hover:not(:disabled) { background: #101a32; color: #e2e8f0; }
+        .attachment-btn:disabled svg { color: #94a3b8; opacity: 0.9; }
+
+        .attachment-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .file-message {
           display: flex;
           align-items: center;
           gap: 10px;
           padding: 8px 12px;
-          background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+          background: linear-gradient(135deg, #0f1629 0%, #101a32 100%);
           border-radius: 10px;
-          border: 1px solid #dee2e6;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          border: 1px solid #26314f;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
           transition: all 0.2s;
           max-width: 280px;
         }
@@ -779,7 +841,7 @@ const DynamicChat = () => {
 
         .file-icon {
           flex-shrink: 0;
-          background: #007bff;
+          background: #1b4edb;
           color: white;
           width: 32px;
           height: 32px;
@@ -787,7 +849,7 @@ const DynamicChat = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 2px 6px rgba(0, 123, 255, 0.2);
+          box-shadow: 0 2px 6px rgba(27, 78, 219, 0.3);
         }
 
         .file-info {
@@ -800,7 +862,7 @@ const DynamicChat = () => {
 
         .file-name {
           font-weight: 600;
-          color: #333;
+          color: #e2e8f0;
           font-size: 13px;
           white-space: nowrap;
           overflow: hidden;
@@ -811,14 +873,14 @@ const DynamicChat = () => {
 
         .file-size {
           font-size: 11px;
-          color: #6c757d;
+          color: #94a3b8;
           font-weight: 500;
           white-space: nowrap;
           flex-shrink: 0;
         }
 
         .file-download {
-          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+          background: linear-gradient(135deg, #1b4edb 0%, #0f3fb1 100%);
           color: white;
           border: none;
           border-radius: 6px;
@@ -830,13 +892,13 @@ const DynamicChat = () => {
           align-items: center;
           gap: 4px;
           transition: all 0.2s;
-          box-shadow: 0 2px 6px rgba(0, 123, 255, 0.2);
+          box-shadow: 0 2px 6px rgba(27, 78, 219, 0.3);
         }
 
         .file-download:hover {
-          background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+          background: linear-gradient(135deg, #0f3fb1 0%, #0a2f89 100%);
           transform: translateY(-1px);
-          box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+          box-shadow: 0 4px 10px rgba(27, 78, 219, 0.4);
         }
 
         .file-download:active {
@@ -869,7 +931,8 @@ const DynamicChat = () => {
         }
 
         .file-preview-modal {
-          background: white;
+          background: #0f1629;
+          border: 1px solid #26314f;
           border-radius: 12px;
           padding: 24px;
           max-width: 500px;
@@ -877,6 +940,7 @@ const DynamicChat = () => {
           max-height: 80vh;
           overflow-y: auto;
           position: relative;
+          color: #e2e8f0;
         }
 
         .file-preview-header {
@@ -885,13 +949,13 @@ const DynamicChat = () => {
           align-items: center;
           margin-bottom: 20px;
           padding-bottom: 12px;
-          border-bottom: 1px solid #e9ecef;
+          border-bottom: 1px solid #26314f;
         }
 
         .file-preview-title {
           font-size: 18px;
           font-weight: 600;
-          color: #333;
+          color: #e2e8f0;
         }
 
         .close-preview-btn {
@@ -905,8 +969,8 @@ const DynamicChat = () => {
         }
 
         .close-preview-btn:hover {
-          background: #f8f9fa;
-          color: #333;
+          background: #101a32;
+          color: #e2e8f0;
         }
 
         .file-preview-content {
@@ -927,10 +991,10 @@ const DynamicChat = () => {
           justify-content: center;
           gap: 16px;
           padding: 24px;
-          background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+          background: linear-gradient(135deg, #0f1629 0%, #101a32 100%);
           border-radius: 12px;
-          border: 2px dashed #007bff;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          border: 2px dashed #26314f;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .preview-file-icon {
@@ -951,7 +1015,7 @@ const DynamicChat = () => {
 
         .preview-file-name {
           font-weight: 600;
-          color: #333;
+          color: #e2e8f0;
           margin-bottom: 6px;
           font-size: 16px;
           line-height: 1.3;
@@ -963,7 +1027,7 @@ const DynamicChat = () => {
 
         .preview-file-size {
           font-size: 14px;
-          color: #6c757d;
+          color: #94a3b8;
           font-weight: 500;
         }
 
@@ -993,7 +1057,7 @@ const DynamicChat = () => {
         }
 
         .send-file-btn {
-          background: #007bff;
+          background: #1b4edb;
           color: white;
           display: flex;
           align-items: center;
@@ -1001,7 +1065,7 @@ const DynamicChat = () => {
         }
 
         .send-file-btn:hover:not(:disabled) {
-          background: #0056b3;
+          background: #0f3fb1;
         }
 
         .send-file-btn:disabled {
@@ -1014,10 +1078,10 @@ const DynamicChat = () => {
           top: 100%;
           left: 0;
           right: 0;
-          background: white;
-          border: 1px solid #dee2e6;
+          background: #0f1629;
+          border: 1px solid #26314f;
           border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
           z-index: 20;
           max-height: 200px;
           overflow-y: auto;
@@ -1026,14 +1090,15 @@ const DynamicChat = () => {
         .search-result {
           padding: 12px 15px;
           cursor: pointer;
-          border-bottom: 1px solid #f1f3f4;
+          border-bottom: 1px solid #26314f;
           display: flex;
           align-items: center;
           gap: 10px;
+          color: #e2e8f0;
         }
 
         .search-result:hover {
-          background: #f8f9fa;
+          background: #101a32;
         }
 
         .search-result:last-child {
@@ -1059,10 +1124,29 @@ const DynamicChat = () => {
         }
 
         @media (max-width: 768px) {
+          .new-chat-btn { padding: 8px 12px; border-radius: 12px; }
           .chat-container {
             height: 100vh;
+            height: 100dvh;
             margin: 0;
             border-radius: 0;
+          }
+          .input-form { gap: 8px; padding: 8px 10px; border-radius: 14px; }
+          .send-btn { width: 40px; height: 40px; }
+          .attachment-btn { width: 38px; height: 38px; }
+          .message-content { max-width: 88%; }
+          .message-bubble { padding: 10px 12px; border-radius: 16px; }
+          .chat-name { font-size: 14px; }
+          .chat-preview { font-size: 12px; }
+          /* If a bottom navigation bar overlaps the chat, offset the input above it */
+          .message-input { 
+            padding: 10px 12px; 
+            box-shadow: 0 -1px 4px rgba(0,0,0,0.16);
+            bottom: calc(64px + env(safe-area-inset-bottom)); /* lift above bottom nav */
+          }
+          .messages-container { 
+            padding-top: 30px; /* give more room under header */
+            padding-bottom: calc(156px + 64px + env(safe-area-inset-bottom)); /* a bit more room for input + bottom nav */
           }
         }
       `}</style>
@@ -1130,10 +1214,10 @@ const DynamicChat = () => {
         </div>
 
         <div className="chat-list">
-          {chats.map(chat => {
-            const currentUserId = JSON.parse(atob(getToken().split('.')[1])).id;
+          {(Array.isArray(chats) ? chats : []).map(chat => {
+            const currentUserId = getCurrentUserId();
             const displayName = getChatDisplayName(chat, currentUserId);
-            const otherParticipant = chat.participants.find(p => p._id !== currentUserId);
+            const otherParticipant = chat.participants.find(p => String(p._id) !== String(currentUserId));
             
             return (
               <div
@@ -1194,50 +1278,49 @@ const DynamicChat = () => {
             <div className="chat-header">
               {isMobile && (
                 <button 
-                  className="back-btn"
+                  className="back-btn icon-btn header-icon"
                   onClick={() => setShowChatList(true)}
+                  aria-label="Back"
                 >
-                  <FiArrowLeft size={20} />
+                  <FiArrowLeft size={18} />
                 </button>
               )}
               <div 
                 className="chat-avatar"
                 style={{
-                  backgroundImage: selectedChat.participants.find(p => p._id !== JSON.parse(atob(getToken().split('.')[1])).id)?.image 
-                    ? `url(${selectedChat.participants.find(p => p._id !== JSON.parse(atob(getToken().split('.')[1])).id).image})` 
-                    : 'none',
-                  backgroundColor: selectedChat.participants.find(p => p._id !== JSON.parse(atob(getToken().split('.')[1])).id)?.image 
-                    ? 'transparent' 
-                    : '#007bff',
+                  backgroundImage: (() => {
+                    const meId = getCurrentUserId();
+                    const other = selectedChat.participants.find(p => String(p._id) !== String(meId));
+                    return other?.image ? `url(${other.image})` : 'none';
+                  })(),
+                  backgroundColor: (() => {
+                    const meId = getCurrentUserId();
+                    const other = selectedChat.participants.find(p => String(p._id) !== String(meId));
+                    return other?.image ? 'transparent' : '#007bff';
+                  })(),
                   backgroundSize: 'cover',
                   backgroundPosition: 'center'
                 }}
               >
-                {!selectedChat.participants.find(p => p._id !== JSON.parse(atob(getToken().split('.')[1])).id)?.image && 
-                  getChatDisplayName(selectedChat, JSON.parse(atob(getToken().split('.')[1])).id)[0]?.toUpperCase()}
+                {(() => {
+                  const meId = getCurrentUserId();
+                  const otherHasImage = selectedChat.participants.find(p => String(p._id) !== String(meId))?.image;
+                  return !otherHasImage && getChatDisplayName(selectedChat, meId)[0]?.toUpperCase();
+                })()}
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: '600', fontSize: '16px' }}>
-                  {getChatDisplayName(selectedChat, JSON.parse(atob(getToken().split('.')[1])).id)}
+                  {getChatDisplayName(selectedChat, getCurrentUserId())}
                 </div>
                 <div style={{ fontSize: '12px', color: '#6c757d' }}>
                   {selectedChat.chatType === 'group' ? `${selectedChat.participants.length} members` : 'Online'}
                 </div>
               </div>
               <button
+                className="icon-btn header-icon danger"
                 onClick={() => deleteChat(selectedChat._id)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '8px',
-                  borderRadius: '50%',
-                  color: '#dc3545',
-                  transition: 'background 0.2s'
-                }}
-                onMouseOver={(e) => e.target.style.background = '#f8f9fa'}
-                onMouseOut={(e) => e.target.style.background = 'none'}
                 title="Delete Chat"
+                aria-label="Delete Chat"
               >
                 <FiTrash size={18} />
               </button>
@@ -1253,9 +1336,9 @@ const DynamicChat = () => {
                   <p>No messages yet. Start the conversation!</p>
                 </div>
               ) : (
-                messages.map(message => {
-                  const currentUserId = JSON.parse(atob(getToken().split('.')[1])).id;
-                  const isOwn = message.sender._id === currentUserId;
+                (Array.isArray(messages) ? messages : []).map(message => {
+                  const currentUserId = getCurrentUserId();
+                  const isOwn = String(message.sender._id) === String(currentUserId);
                   
                   return (
                     <div

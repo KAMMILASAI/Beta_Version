@@ -9,7 +9,7 @@ html, body, #root {
 .dashboard-root {
   min-height: 100%;
   width: 100%;
-  background: #23233a;
+  background: #0b1220;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -23,15 +23,15 @@ html, body, #root {
   overflow: hidden;
 }
 .dashboard-header {
-  background: #1e1e2f;
-  color: #fff;
+  background: #0f1629;
+  color: #e2e8f0;
   padding: 1rem 2rem;
   display: flex;
   align-items: center;
   font-size: 1.2rem;
   font-weight: 500;
   box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  border-bottom: 2px solid #90EE90;
+  /* removed green bottom border */
 }
 
 .dynamic-gradient-text {
@@ -66,15 +66,16 @@ html, body, #root {
   display: flex;
   flex: 1;
   width: 100%;
-  height: calc(100% - 60px);
+  /* let header take natural height; allow children to size correctly */
+  min-height: 0;
   overflow: hidden;
   margin: 0;
   padding: 0;
   position: relative;
 }
 .dashboard-sidebar {
-  background: #23233a;
-  color: #fff;
+  background: #0f1629;
+  color: #e2e8f0;
   width: 70px;
   min-width: 70px;
   max-width: 70px;
@@ -82,7 +83,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   transition: width 0.3s ease, min-width 0.3s ease, max-width 0.3s ease, padding 0.3s ease;
-  border-right: 2px solid #90EE90;
+  /* removed green right border */
   overflow: hidden;
 }
 
@@ -164,45 +165,19 @@ html, body, #root {
 }
 .dashboard-main {
   flex: 1;
-  padding: 0 3%;
+  padding: 0;
   margin: 0;
   min-width: 0;
-  background: #23233a;
+  background: #0b1220;
   overflow-y: auto;
   height: 100%;
   display: block; /* full-width content */
+  box-sizing: border-box;
 }
 
 /* Ensure direct children can span full width */
 .dashboard-main > * {
   width: 100%;
-}
-
-/* Light Theme Overrides (follow body theme) */
-body.theme-light .dashboard-root,
-body.theme-light .dashboard-main {
-  background: #ffffff !important;
-  color: #0f172a;
-}
-
-body.theme-light .dashboard-header {
-  background: #ffffff !important;
-  color: #0f172a;
-  border-bottom-color: #e5e7eb !important;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-
-body.theme-light .sidebar-toggle { color: #0f172a; }
-
-body.theme-light .dashboard-sidebar {
-  background: #ffffff !important;
-  color: #0f172a;
-  border-right-color: #e5e7eb !important;
-}
-
-body.theme-light .dashboard-sidebar nav ul li:hover {
-  background: #2563eb;
-  color: #ffffff;
 }
 @media (max-width: 900px) {
   .dashboard-sidebar {
@@ -213,10 +188,181 @@ body.theme-light .dashboard-sidebar nav ul li:hover {
     top: 0;
     box-shadow: 2px 0 16px rgba(0,0,0,0.08);
   }
+  .dashboard-sidebar.hidden-mobile {
+    display: none;
+  }
   .dashboard-sidebar.closed {
     left: -220px;
   }
   .dashboard-main {
-    padding: 0 3%;
+    padding: 0 12px 72px 12px; /* side gutters + reserve space for bottom nav */
+  }
+  /* tighten header spacing on small screens */
+  .dashboard-header {
+    padding: 0.75rem 1rem !important;
+  }
+}
+
+/* Bottom navigation (mobile) */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60px;
+  background: #0f172a;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 50;
+  --indicator-width: calc(100% / var(--item-count, 1));
+  --active-x: calc(var(--active-index, 0) * var(--indicator-width));
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(8px);
+}
+.bottom-nav-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--indicator-width);
+  height: 3px;
+  transform: translateX(var(--active-x));
+  background: linear-gradient(90deg, #0dcaf0, #38bdf8);
+  border-radius: 2px 2px 0 0;
+  transition: transform 240ms cubic-bezier(.2,.7,.2,1), width 240ms ease;
+}
+/* Icon-only menu items */
+.bottom-nav-item {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  transition: all 0.2s ease;
+}
+
+.bottom-nav-item svg {
+  font-size: 1.6rem;
+  margin: 0;
+  transition: all 0.2s ease;
+}
+
+.bottom-nav-item.active {
+  color: #0ea5e9;
+  background: rgba(14, 165, 233, 0.1);
+}
+
+.bottom-nav-item:active {
+  transform: scale(0.9);
+}
+
+/* Hide all labels */
+.bottom-nav-label {
+  display: none;
+}
+
+/* Active indicator */
+.bottom-nav-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: #0ea5e9;
+  transition: transform 0.3s ease, width 0.3s ease;
+  border-radius: 0 0 3px 3px;
+}
+
+/* Base button styles are now in the icon-only section */
+.bottom-nav-item:active {
+  transform: scale(0.92);
+}
+.bottom-nav-item.active {
+  color: #38bdf8;
+  background: rgba(13, 202, 240, 0.1);
+  font-weight: 500;
+}
+
+.bottom-nav-item:not(.icon-only).active {
+  background: transparent;
+}
+
+.bottom-nav-item:not(.icon-only).active svg {
+  color: #0dcaf0;
+}
+.bottom-nav-item.danger {
+  color: #f87171;
+}
+.bottom-nav-item.danger.active {
+  background: rgba(239, 68, 68, 0.1);
+}
+.bottom-nav-item svg {
+  margin-bottom: 2px;
+  font-size: 1.2rem;
+}
+.bottom-nav-label {
+  font-size: 0.65rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+.bottom-nav-icon svg {
+  width: 24px;
+  height: 24px;
+}
+/* Ripple effect */
+.bottom-nav-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.16;
+  transform: translate(-50%, -50%);
+}
+.bottom-nav-item:active::after {
+  width: 160px;
+  height: 160px;
+  transition: width 360ms ease, height 360ms ease;
+}
+
+/* Hide/show animation for bottom nav */
+.bottom-nav.hidden {
+  transform: translateY(80px);
+  transition: transform 220ms ease;
+}
+.bottom-nav:not(.hidden) {
+  transform: translateY(0);
+  transition: transform 220ms ease;
+}
+
+/* Page transition for route changes */
+.page-anim {
+  animation: pageFadeSlide 220ms ease;
+}
+@keyframes pageFadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

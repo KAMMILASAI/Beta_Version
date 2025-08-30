@@ -37,6 +37,17 @@
   padding: 12px 24px !important;
 }
 
+/* Base grids */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
 /* Dynamic Profile Card */
 .profile-card {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -195,7 +206,7 @@
 }
 
 .interview-table tbody tr:hover {
-  background-color: #f8f9fa;
+  background-color: #0f1629;
   transform: scale(1.01);
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }

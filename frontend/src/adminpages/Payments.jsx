@@ -15,7 +15,7 @@ const Payments = () => {
   const fetchPayments = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/admin/payments', {
+      const response = await axios.get('http://localhost:8080/api/admin/payments', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setList(response.data);
@@ -34,7 +34,7 @@ const Payments = () => {
     setDeleteLoading(paymentId);
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/admin/payments/${paymentId}`, {
+      await axios.delete(`http://localhost:8080/api/admin/payments/${paymentId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

@@ -22,6 +22,14 @@ const OAuth2RedirectHandler = () => {
       const oAuth2Provider = urlParams.get('oAuth2Provider');
 
       if (error) {
+        if (error === 'pending_approval' && role === 'recruiter') {
+          setStatus('Your recruiter account is pending admin approval. You will be able to login once approved.');
+          showError('Recruiter account pending admin approval. Please wait for approval.');
+          setTimeout(() => {
+            navigate('/login');
+          }, 2500);
+          return;
+        }
         setStatus(`Authentication failed: ${error}`);
         showError(`OAuth2 authentication failed: ${error}`);
         setTimeout(() => {
@@ -109,7 +117,7 @@ const OAuth2RedirectHandler = () => {
       }}>
         {status}
       </p>
-      <style jsx>{`
+      <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }

@@ -35,7 +35,7 @@ export default function ResumeChecker() {
       const formData = new FormData();
       formData.append('resume', file);
       formData.append('jobDescription', jobDesc);
-      const res = await axios.post('http://localhost:5000/api/candidate/resume-check', formData, {
+      const res = await axios.post('http://localhost:8080/api/candidate/resume-check', formData, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
       });
       setResult(res.data);

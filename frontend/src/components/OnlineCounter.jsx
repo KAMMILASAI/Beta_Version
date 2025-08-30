@@ -1,43 +1,48 @@
 import React, { useState, useEffect } from 'react';
+import { FaEye } from 'react-icons/fa';
 import './OnlineCounter.css';
 
 const OnlineCounter = () => {
   const [onlineCount, setOnlineCount] = useState(0);
+  const [hovered, setHovered] = useState(false);
+
+  const API_BASE = import.meta?.env?.VITE_API_BASE_URL || 'http://localhost:8080/api';
+
+  // Stable client id in localStorage
+  const getClientId = () => {
+    let id = localStorage.getItem('presence_client_id');
+    if (!id) {
+      id = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+      localStorage.setItem('presence_client_id', id);
+    }
+    return id;
+  };
 
   useEffect(() => {
-    // Function to fetch online count
+    // Function to fetch online count from backend
     const fetchOnlineCount = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/online-count');
-        if (response.ok) {
-          const data = await response.json();
-          setOnlineCount(data.count);
-        } else {
-          // Set a realistic mock count if API fails
-          setOnlineCount(Math.floor(Math.random() * 25) + 15);
-        }
-      } catch (error) {
-        // Set a realistic mock count if API fails
-        setOnlineCount(Math.floor(Math.random() * 25) + 15);
+        const res = await fetch(`${API_BASE}/presence/count`, { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (typeof data?.count === 'number') setOnlineCount(data.count);
+      } catch (_) {
+        // silent fail
       }
     };
 
     // Function to update user's online status
-    const updateOnlineStatus = async (status) => {
+    const updateOnlineStatus = async (_status) => {
       try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          await fetch('http://localhost:5000/api/update-online-status', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ status })
-          });
-        }
-      } catch (error) {
-        // Silently fail - not critical
+        const clientId = getClientId();
+        await fetch(`${API_BASE}/presence/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ clientId })
+        });
+      } catch (_) {
+        // ignore
       }
     };
 
@@ -50,10 +55,10 @@ const OnlineCounter = () => {
     // Set up interval to fetch count every 15 seconds
     const interval = setInterval(fetchOnlineCount, 15000);
 
-    // Set up heartbeat to keep user online every 45 seconds
+    // Set up heartbeat to keep user online every 30 seconds
     const heartbeat = setInterval(() => {
       updateOnlineStatus('online');
-    }, 45000);
+    }, 30000);
 
     // Handle beforeunload (user leaving page)
     const handleBeforeUnload = () => {
@@ -73,10 +78,18 @@ const OnlineCounter = () => {
   }, []);
 
   return (
-    <div className="online-counter-simple">
-      <div className="online-dot"></div>
-      <span className="online-text">Online</span>
-      <span className="online-count">{onlineCount}</span>
+    <div
+      className="online-counter-simple collapsed"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      aria-label={`Online ${onlineCount}`}
+    >
+      <FaEye className="online-eye" />
+      {hovered && (
+        <div className="online-tooltip">
+          <span className="online-tooltip-text">Online {onlineCount}</span>
+        </div>
+      )}
     </div>
   );
 };
